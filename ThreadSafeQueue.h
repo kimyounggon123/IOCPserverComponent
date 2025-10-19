@@ -45,7 +45,12 @@ public:
 	// 이 부분에서 패킷이 만약 빌 때 pop을 하는 경우가 생김.
 	bool pop(T& output)
 	{
-		if (stackEvent != NULL) WaitForSingleObject(stackEvent, howMuchWait);
+		if (stackEvent != NULL)
+		{
+			DWORD result = WaitForSingleObject(stackEvent, howMuchWait);
+			if (result == WAIT_TIMEOUT) return false;
+		}
+
 		EnterCriticalSection(&stack_cs);
 
 		if (safe_stack.empty())
@@ -54,8 +59,10 @@ public:
 			return false;
 		}
 
-		output = safe_stack.top();
-		safe_stack.pop();
+
+		auto& val = safe_stack.top();
+		std::cout << "Stack front: " << val << "\n"; // 값 확인
+		output = val;
 
 		if (stackEvent != NULL && safe_stack.empty())
 			ResetEvent(stackEvent); // 마지막 pop 후
@@ -130,7 +137,9 @@ public:
 			return false;
 		}
 
-		output = safe_queue.front();
+		auto& val = safe_queue.front();
+		std::cout << "Queue front: " << val << "\n"; // 값 확인
+		output = val;
 		safe_queue.pop();
 
 		if(queueEvent != NULL && safe_queue.empty())

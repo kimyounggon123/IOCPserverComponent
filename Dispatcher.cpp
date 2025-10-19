@@ -64,6 +64,10 @@ bool Dispatcher::enqueue(TaskQueueInput*& input, const QueueInformation& where)
 	case QueueInformation::Send:
 		result = taskToSendClient.enqueue(input);
 		break;
+
+	default:
+		break;
+
 	}
 	return result;
 }
@@ -86,8 +90,10 @@ bool Dispatcher::dequeue(TaskQueueInput*& output, const QueueInformation& where)
 	case QueueInformation::Send:
 		result = taskToSendClient.dequeue(output);
 		break;
-	}
 
+	default:
+		break;
+	}
 
 	return result;
 }

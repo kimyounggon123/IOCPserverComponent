@@ -59,7 +59,7 @@ struct SOCKETINFO {
 	IO_CONTEXT request;
 	IO_CONTEXT response;
 
-	bool acceptCompleted;
+	std::atomic<bool> acceptCompleted;
 
 	CRITICAL_SECTION send_cs;
 

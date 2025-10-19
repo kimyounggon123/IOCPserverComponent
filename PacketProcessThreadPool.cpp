@@ -23,7 +23,8 @@ unsigned int PacketProcessThreadPool::workLoop() // in while loop
 		try
 		{
 			if (!dispatcher.dequeue(output, QueueInformation::PacketProcess)) continue;
-			if (output == nullptr || output->isInvalid()) throw "output error";
+			if (output == nullptr) throw "output error";
+			if (output->isInvalid()) throw "output field error";
 
 			/// packet process
 			auto func = packetProcess->getFunc(output);

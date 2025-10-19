@@ -224,37 +224,33 @@ unsigned int WINAPI IOCPserver::workerThread(LPVOID server_info)
 			// 서버/클라이언트 강제 종료 시
 			if (retval == 0)
 			{
-				
-				logs.log("retval is 0", ThreadIDstring.c_str());
-				if (sessionManager.delete_socketinfo(socketinfo->id)) logs.log("retval: delete_socketinfo()", ThreadIDstring.c_str());
-				else logs.log_error("Can't find socketinfo!", ThreadIDstring.c_str());
+				int err = WSAGetLastError();
+				std::string errorMsg = "IO error, WSAError=" + std::to_string(err);
+				logs.log(errorMsg.c_str(), ThreadIDstring.c_str());
+				sessionManager.delete_socketinfo(socketinfo->id);
 				continue;
 			}
 
 			// 접속 성공 혹은 종료 시
 			if (cbTransferred == 0)
 			{
-				// socketinfo가 이미 접속 중이었다면
-				if (socketinfo->acceptCompleted)
+				// 기존 접속 종료
+				if (socketinfo->acceptCompleted.load())
 				{
-					logs.log("socketinfo is in here", ThreadIDstring.c_str());
-					if (sessionManager.delete_socketinfo(socketinfo->id)) logs.log("isinHere: delete_socketinfo()", ThreadIDstring.c_str());
-					else logs.log_error("Can't find socketinfo!", ThreadIDstring.c_str());
-
+					logs.log("Remote closed connection", ThreadIDstring.c_str());
+					sessionManager.delete_socketinfo(socketinfo->id);
 					continue;
 				}
-				
-				// 새로이 접속한 SOCKETINFO라면
+
+				// 신규 접속
 				else
 				{
-					if (sessionManager.getClientCount() % 50 == 0) printf("clients: %d\n", sessionManager.getClientCount());
 					if (!This->welcomeClient(socketinfo))
 					{
-						if (sessionManager.delete_socketinfo(socketinfo->id)) logs.log("welcome: delete_socketinfo()", ThreadIDstring.c_str());
-						else logs.log_error("Can't find socketinfo!", ThreadIDstring.c_str());
-						throw "welcomeClient()";
+						sessionManager.delete_socketinfo(socketinfo->id);
+						throw "welcomeClient() failed";
 					}
-					socketinfo->acceptCompleted = true;
+					socketinfo->acceptCompleted.store(true);
 				}
 			}
 
@@ -389,8 +385,8 @@ unsigned int SendManager::workLoop()
 		try
 		{
 			if (!dispatcher.dequeue(output, QueueInformation::Send)) continue;
-			if (output == nullptr || output->isInvalid()) throw "output field error";
-
+			if (output == nullptr) throw "output error";
+			if (output->isInvalid()) throw "output field error";
 			output->packet->setClientID(0); // 클라이언트로 전송 시 패킷에 저장된 client id를 초기화시킴
 
 			// Serialize
@@ -506,7 +502,8 @@ INT DBconnector::send_to_DB() {
 	int serialize_size = 0;
 	try {
 		if (!dispatcher.dequeue(output, QueueInformation::Database)) return 0;
-		if (output == nullptr || output->isInvalid()) throw "process is empty!";
+		if (output == nullptr) throw "output error";
+		if (output->isInvalid()) throw "output field error";
 
 		// serialize
 		output->packet->setClientID(output->sessionInfo->id); // 후에 클라이언트 조회를 위해 패킷에 클라이언트 id input
