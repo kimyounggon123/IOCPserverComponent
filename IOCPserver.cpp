@@ -269,7 +269,7 @@ unsigned int WINAPI IOCPserver::workerThread(LPVOID server_info)
 			}
 
 			// update last activity time
-			socketinfo->updateActivity();
+			//if (socketinfo) socketinfo->updateActivity();
 
 		}
 

@@ -11,10 +11,8 @@
 #pragma comment(lib, "Mswsock.lib")
 #pragma comment(lib, "ws2_32.lib")
 
-
 #include "ThreadSafeQueue.h"
 #include "Logs.h"
-
 
 // session control class
 enum class IO_TYPE { Request, Response };
