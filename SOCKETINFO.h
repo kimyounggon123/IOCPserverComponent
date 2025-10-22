@@ -195,6 +195,8 @@ public:
 			return false;
 		}
 
+		// 실 삭제가 아니라 그냥 id만 유효하지 않은 값으로 바꿀까?
+		it->second->id = 0;
 		delete it->second;
 		client_map.erase(it);
 
@@ -204,13 +206,13 @@ public:
 		return true;
 	}
 
-	void search_and_destory()
+	void destroyInvalid()
 	{
 		EnterCriticalSection(&map_cs);
 
 		for (auto it = client_map.begin(); it != client_map.end(); )
 		{
-			if (it->second->id <= 0)
+			if (it->second->id == 0)
 			{
 				delete it->second;
 				client_map.erase(it);

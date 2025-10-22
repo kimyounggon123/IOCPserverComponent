@@ -261,16 +261,13 @@ unsigned int WINAPI IOCPserver::workerThread(LPVOID server_info)
 			{
 				This->makePacketFromIOresult(socketinfo, cbTransferred);
 				if (!This->recvFromSOCKETINFO(socketinfo)) throw "request()";
+				if (socketinfo) socketinfo->updateActivity();
 			}
 
 			if (io->ioType == IO_TYPE::Response)
 			{
 				if (socketinfo) socketinfo->setEvent();
 			}
-
-			// update last activity time
-			//if (socketinfo) socketinfo->updateActivity();
-
 		}
 
 		catch (const char* msg)
