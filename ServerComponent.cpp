@@ -74,6 +74,8 @@ void ServerComponent::WorkDebugger()
 
 			if (input.isKeyDown('M')) logs.showMemoryUsage("Server");
 		}
+
+		sessionManager.destroyInvalid();
 		Sleep(50);
 	}
 

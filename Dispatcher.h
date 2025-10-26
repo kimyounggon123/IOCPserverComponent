@@ -13,7 +13,7 @@ struct TaskQueueInput
 	Packet* packet;
 
 public:
-	TaskQueueInput(SOCKETINFO* sessionInfo = nullptr) : sessionInfo(sessionInfo), packet(new Packet(false))
+	TaskQueueInput(SOCKETINFO* sessionInfo = nullptr) : sessionInfo(sessionInfo), packet(new Packet())
 	{}
 	TaskQueueInput& operator=(const TaskQueueInput& other)
 	{

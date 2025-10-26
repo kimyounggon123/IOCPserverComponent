@@ -55,7 +55,6 @@ void Logs::showMemoryUsage(const char* where)
 	_tprintf(_T("\n---------------------------------<Memory Information>--------------------------\n"));
 	if (GetProcessMemoryInfo(hProcess, &pmc, sizeof(pmc)))
 	{
-		printCurrTime();
 		_tprintf(_T("WorkingSetSize (physical memory used): %.2f KB(Where : %hs)\n"), pmc.WorkingSetSize / 1024.0, where);
 		_tprintf(_T("PagefileUsage (physical memory used): %.2f KB(Where : %hs)\n"), pmc.PagefileUsage / 1024.0, where);
 	}
@@ -63,7 +62,8 @@ void Logs::showMemoryUsage(const char* where)
 	{
 		_tprintf(_T("Printing memory is failed"));
 	}
-	_tprintf(_T("---------------------------------------------------------------------------------\n"));
+	printCurrTime();
+	_tprintf(_T("\n---------------------------------------------------------------------------------\n"));
 }
 
 void Logs::showHeapInfo()
@@ -76,7 +76,6 @@ void Logs::showHeapInfo()
 	size_t freeBytes = memState.lSizes[_FREE_BLOCK];
 
 	_tprintf(_T("\n--------------------<Heap Information>--------------------\n"));
-	printCurrTime();
 	_tprintf(_T("[Heap] Normal block bytes : %zu\n"), normalBytes);
 	_tprintf(_T("[Heap] CRT block bytes    : %zu\n"), crtBytes);
 	_tprintf(_T("[Heap] Free block bytes   : %zu\n"), freeBytes);
@@ -125,13 +124,12 @@ void Logs::showHeapWalk()
 
 	_tprintf(_T("--------------------<Heap Information>--------------------\n"));
 	_tprintf(_T("Heap fragmentation: %.2f%%\n"), fragmentation);
-	_tprintf(_T("Used heap: %.2f%% (%llu used / %llu total)\n"),
-		usedRatio,
-		(unsigned long long)totalUsed,
-		(unsigned long long)(totalUsed + totalFree));
+	_tprintf(_T("Used heap: %.2f%%\n"),	usedRatio);
 	_tprintf(_T("Used blocks: %llu / totalUsed bytes: %llu\n"),
 		(unsigned long long)usedBlocks, (unsigned long long)totalUsed);
 	_tprintf(_T("Free blocks: %llu / totalFree bytes: %llu\n"),
 		(unsigned long long)freeBlocks, (unsigned long long)totalFree);
-	_tprintf(_T("----------------------------------------------------------\n"));
+	_tprintf(_T("Total heap bytes: %llu\n"), (unsigned long long)(totalUsed + totalFree));
+	printCurrTime();
+	_tprintf(_T("\n----------------------------------------------------------\n"));
 }

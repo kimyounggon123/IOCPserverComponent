@@ -5,7 +5,7 @@
 #include <queue>
 #include <Windows.h>
 #include <atomic>
-
+#include <iostream>
 template <typename T>
 class ThreadSafeStack 
 {
@@ -61,8 +61,9 @@ public:
 
 
 		auto& val = safe_stack.top();
-		std::cout << "Stack front: " << val << "\n"; // 값 확인
+		//std::cout << "Stack front: " << val << "\n"; // 값 확인
 		output = val;
+		safe_stack.pop();
 
 		if (stackEvent != NULL && safe_stack.empty())
 			ResetEvent(stackEvent); // 마지막 pop 후
@@ -138,7 +139,7 @@ public:
 		}
 
 		auto& val = safe_queue.front();
-		std::cout << "Queue front: " << val << "\n"; // 값 확인
+		//std::cout << "Queue front: " << val << "\n"; // 값 확인
 		output = val;
 		safe_queue.pop();
 

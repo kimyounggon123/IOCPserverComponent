@@ -1,7 +1,7 @@
 #ifndef _PACKET_H
 #define _PACKET_H
 
-
+#include <Windows.h>
 #include "stdafx.h"
 #include <cstdint>
 #include <cstring>
@@ -31,25 +31,23 @@ enum class PacketResult
 struct PacketHeader
 {
 	// Header informations
-	bool needToMarshal;
 	int clientID;
 	PacketType type;
 	PacketResult result;
 	int length;
 
-	PacketHeader(bool needToMarshal) : clientID(0), needToMarshal(needToMarshal), type(PacketType::Default), result(PacketResult::Try), length(0)
+	PacketHeader() : clientID(0), type(PacketType::Default), result(PacketResult::Try), length(0)
 	{}
-	PacketHeader(int clientID, bool needToMarshal, PacketType type, PacketResult result) : clientID(clientID), needToMarshal(needToMarshal), type(type), result(result), length(0)
+	PacketHeader(int clientID, PacketType type, PacketResult result) : clientID(clientID), type(type), result(result), length(0)
 	{}
 
 	PacketHeader(const PacketHeader& other) :
-		clientID(other.clientID), needToMarshal(other.needToMarshal), type(other.type), result(other.result), length(other.length)
+		clientID(other.clientID), type(other.type), result(other.result), length(other.length)
 	{}
 
 	PacketHeader& operator=(const PacketHeader& other)
 	{
 		if (this != &other) {
-			needToMarshal = other.needToMarshal;
 			clientID = other.clientID;
 			type = other.type;
 			result = other.result;
@@ -70,13 +68,16 @@ class Packet
 	bool is_ascii(const std::string& str);
 	bool is_ascii(const char* str);
 
+
+	void inputHeader(char* buffer, size_t& offset);
+	void copyHeader(const char* buffer, size_t& offset);
 public:
 	static const unsigned int end_mark;
 	// static const int maxSize = 1042;
 
-	Packet(bool needToMarshal): header(needToMarshal), data{}
+	Packet(): header{}, data{}
 	{}
-	Packet(int clientID, bool needToMarshal, PacketType type, PacketResult result): header(clientID, needToMarshal, type, result), data{}
+	Packet(int clientID, PacketType type, PacketResult result): header(clientID, type, result), data{}
 	{}
 
 	Packet(const Packet& other) :
@@ -102,11 +103,17 @@ public:
 	// These methods'll be used when you use or input data in the packet
 	void CLEAR_PACKET(bool delete_pk = false); // clear packet data. you can change header
 
-	ERROR_CODE inputData(const void* data, const size_t& data_size, size_t& offset);
+	ERROR_CODE inputData(const void* src, const size_t& data_size, size_t& offset); // 固府 单捞磐 endian 贸府秦具 窃.
+
+	ERROR_CODE inputDataInt(int32_t src, size_t& offset);
+	ERROR_CODE inputDataFloat(float src, size_t& offset);
 	ERROR_CODE inputString(const char* data, size_t& offset);
 	ERROR_CODE inputString(const std::string& data, size_t& offset);
 
 	ERROR_CODE copyData(void* dest, const size_t& data_size, size_t& offset);
+
+	ERROR_CODE copyDataInt(int32_t* dest, size_t& offset);
+	ERROR_CODE copyDataFloat(float* dest, size_t& offset);
 	ERROR_CODE copyString(char* dest, size_t& offset);
 	ERROR_CODE copyString(std::string& dest, size_t& offset);
 

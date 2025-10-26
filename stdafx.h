@@ -84,19 +84,4 @@ bool SAFE_FREE_ARRAY(T*& ptr) {
 /// 
 
 
-inline int changeEndianInt(int value)
-{
-	unsigned int uvalue = static_cast<unsigned int>(value); // unsigned로 변환
-	unsigned int result = (uvalue & 0x000000ff) << 24 | (uvalue & 0x0000ff00) << 8 | (uvalue & 0x00ff0000) >> 8 | (uvalue & 0xff000000) >> 24;
-	return static_cast<int>(result);
-}
-inline short changeEndianShort(short value)
-{
-	unsigned short uvalue = static_cast<unsigned short>(value); // unsigned로 변환
-	unsigned short result =  (uvalue & 0x00ff) << 8 | (uvalue & 0xff00) >> 8;
-	return static_cast<short>(result);
-}
-
-
-
 #endif

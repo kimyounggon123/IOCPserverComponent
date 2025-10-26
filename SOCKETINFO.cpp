@@ -9,7 +9,6 @@ bool SOCKETINFO::response_proc()
 	bool result = true;
 
 	// 전송은 한 번에 한 번 씩
-	EnterCriticalSection(&send_cs);
 	Packet* pk = nullptr;
 	try
 	{

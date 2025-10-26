@@ -3,7 +3,6 @@
 #ifndef _CLIENTINFORMATIONS_H
 #define _CLIENTINFORMATIONS_H
 
-#include "Packet.h"
 #include <unordered_map>
 #include <WinSock2.h>
 #include <MSWSock.h>
@@ -11,11 +10,9 @@
 #pragma comment(lib, "Mswsock.lib")
 #pragma comment(lib, "ws2_32.lib")
 
-
 #include "ThreadSafeQueue.h"
 #include "Logs.h"
-
-
+#include "Packet.h"
 // session control class
 enum class IO_TYPE { Request, Response };
 struct SOCKETINFO;
@@ -61,14 +58,15 @@ struct SOCKETINFO {
 
 	std::atomic<bool> acceptCompleted;
 
-	CRITICAL_SECTION send_cs;
+	HANDLE hEvent;
 
 	SOCKETINFO() :
 		id(0), lastActive(GetTickCount64()),
 		request(IO_TYPE::Request, this), response(IO_TYPE::Response, this), acceptCompleted(false),
 		sock(INVALID_SOCKET), addr{}
 	{
-		InitializeCriticalSection(&send_cs);
+		hEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
+		if (hEvent != NULL) SetEvent(hEvent);
 		//sock = WSASocket(AF_INET, SOCK_STREAM, 0, nullptr, 0, WSA_FLAG_OVERLAPPED);
 	}
 	~SOCKETINFO()
@@ -77,12 +75,14 @@ struct SOCKETINFO {
 		closesocket(sock);
 		sock = INVALID_SOCKET;
 		addr = {};
-		DeleteCriticalSection(&send_cs);
+		CloseHandle(hEvent);
 	}
 
 	bool response_proc();
 
-	void leaveSendSection() { LeaveCriticalSection(&send_cs); }
+	DWORD waitEvent() { return WaitForSingleObject(hEvent, INFINITE); }
+	void setEvent() { SetEvent(hEvent); }
+
 	void updateActivity() { lastActive = GetTickCount64(); }
 };
 
@@ -110,10 +110,14 @@ class ClientSessionManager
 	std::unordered_map<int, T>	client_map; // 현재 접속한 클라이언트 목록들
 	CRITICAL_SECTION map_cs;
 
+	std::vector<T>deletedClients;
+	CRITICAL_SECTION deleteCS;
+
 	static ClientSessionManager<T>* instance;
 	ClientSessionManager() : next_id(1), countClient(0)
 	{
 		InitializeCriticalSection(&map_cs);
+		InitializeCriticalSection(&deleteCS);
 	}
 public:
 
@@ -130,6 +134,7 @@ public:
 	{
 		delete_all();
 		DeleteCriticalSection(&map_cs);
+		DeleteCriticalSection(&deleteCS);
 	}
 
 
@@ -194,8 +199,10 @@ public:
 			return false;
 		}
 
-		delete it->second;
-		client_map.erase(it);
+		// 실 삭제가 아니라 그냥 id만 유효하지 않은 값으로 바꿀까?
+		it->second->id = 0;
+		//delete it->second;
+		//client_map.erase(it);
 
 		countClient--;
 		LeaveCriticalSection(&map_cs);
@@ -203,19 +210,20 @@ public:
 		return true;
 	}
 
-	void search_and_destory()
+	void destroyInvalid()
 	{
 		EnterCriticalSection(&map_cs);
 
-		for (auto it = client_map.begin(); it != client_map.end(); )
+		
+		for (auto it = client_map.begin(); it != client_map.end(); it++)
 		{
-			if (it->second->id <= 0)
+			if (it->second->id == 0)
 			{
 				delete it->second;
 				client_map.erase(it);
 			}
 		}
-
+		
 		LeaveCriticalSection(&map_cs);
 	}
 

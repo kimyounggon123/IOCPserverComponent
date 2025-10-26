@@ -220,6 +220,7 @@ unsigned int WINAPI IOCPserver::workerThread(LPVOID server_info)
 
 			IO_CONTEXT* io = CONTAINING_RECORD(overlapped, IO_CONTEXT, overlapped); // 안전하게 OVERLAPPED를 IO_CONTEXT로 변경
 			socketinfo = io->owner; // IO_CONTEXT에서 역추적
+			if (socketinfo == nullptr) continue;
 
 			// 서버/클라이언트 강제 종료 시
 			if (retval == 0)
@@ -251,25 +252,22 @@ unsigned int WINAPI IOCPserver::workerThread(LPVOID server_info)
 						throw "welcomeClient() failed";
 					}
 					socketinfo->acceptCompleted.store(true);
+					if (sessionManager.getClientCount() % 50 == 0)printf("count: %d\n", sessionManager.getClientCount());
 				}
 			}
-
 
 			// cbTransferred > 0 일 경우
 			if (io->ioType == IO_TYPE::Request)
 			{
 				This->makePacketFromIOresult(socketinfo, cbTransferred);
 				if (!This->recvFromSOCKETINFO(socketinfo)) throw "request()";
+				if (socketinfo) socketinfo->updateActivity();
 			}
 
 			if (io->ioType == IO_TYPE::Response)
 			{
-				if (socketinfo != nullptr) InitializeCriticalSection(&socketinfo->send_cs);
+				if (socketinfo) socketinfo->setEvent();
 			}
-
-			// update last activity time
-			socketinfo->updateActivity();
-
 		}
 
 		catch (const char* msg)
@@ -396,7 +394,8 @@ unsigned int SendManager::workLoop()
 			output->sessionInfo->response.reset_overlapped(output->sessionInfo->response.IO_buffer, pk_len);
 
 
-			if (output->sessionInfo != nullptr) EnterCriticalSection(&output->sessionInfo->send_cs);
+			if (output->sessionInfo->waitEvent() == WAIT_TIMEOUT) throw "waitMutex() time up";
+			
 			// Sending data
 			INT retval;
 			DWORD sendbytes;
