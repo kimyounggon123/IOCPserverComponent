@@ -119,7 +119,7 @@ ERROR_CODE Packet::inputString(const std::string& src, size_t& offset) {
 	return ERROR_CODE::SUCCESS;
 }
 
-ERROR_CODE Packet::copyData(void* dest, const size_t& data_size, size_t& offset) {
+ERROR_CODE Packet::readData(void* dest, const size_t& data_size, size_t& offset) {
 	if (!dest) return ERROR_CODE::GET_NULLPTR;
 	if (offset + data_size > BUFFERSIZE) return ERROR_CODE::INCORRECT_SIZE;
 
@@ -130,7 +130,7 @@ ERROR_CODE Packet::copyData(void* dest, const size_t& data_size, size_t& offset)
 	return ERROR_CODE::SUCCESS;
 }
 
-ERROR_CODE Packet::copyDataInt(int32_t* dest, size_t& offset)
+ERROR_CODE Packet::readDataInt(int32_t* dest, size_t& offset)
 {
 	if (!dest) return ERROR_CODE::GET_NULLPTR;
 	if (offset + sizeof(int32_t) > BUFFERSIZE) return ERROR_CODE::INCORRECT_SIZE;
@@ -144,7 +144,7 @@ ERROR_CODE Packet::copyDataInt(int32_t* dest, size_t& offset)
 	return ERROR_CODE::SUCCESS;
 }
 
-ERROR_CODE Packet::copyDataFloat(float* dest, size_t& offset)
+ERROR_CODE Packet::readDataFloat(float* dest, size_t& offset)
 {
 	if (!dest) return ERROR_CODE::GET_NULLPTR;
 	if (offset + sizeof(float) > BUFFERSIZE) return ERROR_CODE::INCORRECT_SIZE;
@@ -160,7 +160,7 @@ ERROR_CODE Packet::copyDataFloat(float* dest, size_t& offset)
 	return ERROR_CODE::SUCCESS;
 }
 
-ERROR_CODE Packet::copyString(char* dest, size_t& offset) {
+ERROR_CODE Packet::readString(char* dest, size_t& offset) {
 	if (!dest) return ERROR_CODE::GET_NULLPTR;
 
 	// check string flag
@@ -168,7 +168,7 @@ ERROR_CODE Packet::copyString(char* dest, size_t& offset) {
 
 	// read string length
 	int32_t str_len;
-	ERROR_CODE code = copyDataInt(&str_len, offset);
+	ERROR_CODE code = readDataInt(&str_len, offset);
 	if (!code) return code;
 
 	// read real string
@@ -180,14 +180,14 @@ ERROR_CODE Packet::copyString(char* dest, size_t& offset) {
 	return ERROR_CODE::SUCCESS;
 }
 
-ERROR_CODE Packet::copyString(std::string& dest, size_t& offset) {
+ERROR_CODE Packet::readString(std::string& dest, size_t& offset) {
 
 	// check string flag
 	bool is_utf8 = data[offset++] == 1;
 
 	// read string length
 	int32_t str_len;
-	ERROR_CODE code = copyDataInt(&str_len, offset);
+	ERROR_CODE code = readDataInt(&str_len, offset);
 	if (!code) return code;
 
 	// read real string

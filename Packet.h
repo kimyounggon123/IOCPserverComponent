@@ -110,12 +110,12 @@ public:
 	ERROR_CODE inputString(const char* data, size_t& offset);
 	ERROR_CODE inputString(const std::string& data, size_t& offset);
 
-	ERROR_CODE copyData(void* dest, const size_t& data_size, size_t& offset);
+	ERROR_CODE readData(void* dest, const size_t& data_size, size_t& offset);
 
-	ERROR_CODE copyDataInt(int32_t* dest, size_t& offset);
-	ERROR_CODE copyDataFloat(float* dest, size_t& offset);
-	ERROR_CODE copyString(char* dest, size_t& offset);
-	ERROR_CODE copyString(std::string& dest, size_t& offset);
+	ERROR_CODE readDataInt(int32_t* dest, size_t& offset);
+	ERROR_CODE readDataFloat(float* dest, size_t& offset);
+	ERROR_CODE readString(char* dest, size_t& offset);
+	ERROR_CODE readString(std::string& dest, size_t& offset);
 
 	/// <Serialize methods>
 	ERROR_CODE serialize(char* buffer, int& size);
