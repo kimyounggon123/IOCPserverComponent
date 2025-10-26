@@ -54,12 +54,21 @@ ERROR_CODE Packet::inputDataFloat(float src, size_t& offset)
 {
 	if (offset + sizeof(float) > BUFFERSIZE) return ERROR_CODE::INCORRECT_SIZE;
 
-	int endianData = htonl(src);
+	// static_assert 컴파일 시점에서 보여주는 에러 코드 false면 적은 에러 메시지 출력
+	static_assert(sizeof(float) == sizeof(uint32_t), "float size must be 4 bytes"); 
 
-	memcpy(data + offset, &endianData, sizeof(float));
+	// float → uint32_t (비트 복사)
+	uint32_t tmp;
+	memcpy(&tmp, &src, sizeof(float));
+
+	// network byte order
+	tmp = htonl(tmp);
+
+	// buffer에 복사
+	memcpy(data + offset, &tmp, sizeof(float));
 	offset += sizeof(float);
 
-	// reset pk length
+	// header length 갱신 (데이터 길이 기준)
 	header.length = static_cast<int>(offset);
 
 	return ERROR_CODE::SUCCESS;
@@ -140,11 +149,13 @@ ERROR_CODE Packet::copyDataFloat(float* dest, size_t& offset)
 	if (!dest) return ERROR_CODE::GET_NULLPTR;
 	if (offset + sizeof(float) > BUFFERSIZE) return ERROR_CODE::INCORRECT_SIZE;
 
-	// copy data
-	float temp;
-	memcpy(&temp, data + offset, sizeof(float));
+	uint32_t tmp;
+	memcpy(&tmp, data + offset, sizeof(uint32_t));
 	offset += sizeof(float);
-	*dest = ntohl(temp);
+
+	tmp = ntohl(tmp);
+
+	memcpy(dest, &tmp, sizeof(float));
 
 	return ERROR_CODE::SUCCESS;
 }
