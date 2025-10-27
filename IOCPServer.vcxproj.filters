@@ -1,0 +1,132 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="소스 파일">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="헤더 파일">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="리소스 파일">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="소스 파일\Server">
+      <UniqueIdentifier>{e528faf3-1272-4c07-95e1-db3714a26b4f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Server">
+      <UniqueIdentifier>{22379fd2-dcf1-4d07-bdb3-5d1099922193}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Utils">
+      <UniqueIdentifier>{260a87e1-db8d-4bba-92b5-546f63d31d2c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Utils">
+      <UniqueIdentifier>{943716fe-5a5d-4f1c-b744-f3c7ea83ed9a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Packet">
+      <UniqueIdentifier>{7b8be53d-2560-4f0a-a897-b7bba9b977e6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Packet">
+      <UniqueIdentifier>{4faa4ef0-d06c-4ab6-9ddf-8c1b997796b3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Client">
+      <UniqueIdentifier>{7adf0adc-8cc7-483c-acf9-fa36123cae50}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Client">
+      <UniqueIdentifier>{f4e1126f-a30b-4c25-8e8c-a6b9268e09cf}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="IOCPserver.cpp">
+      <Filter>소스 파일\Server</Filter>
+    </ClCompile>
+    <ClCompile Include="Logs.cpp">
+      <Filter>소스 파일\Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="ThreadSafeQueue.cpp">
+      <Filter>소스 파일\Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="ThreadPool.cpp">
+      <Filter>소스 파일\Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="Packet.cpp">
+      <Filter>소스 파일\Packet</Filter>
+    </ClCompile>
+    <ClCompile Include="PacketProcess.cpp">
+      <Filter>소스 파일\Packet</Filter>
+    </ClCompile>
+    <ClCompile Include="PacketProcessThreadPool.cpp">
+      <Filter>소스 파일\Server</Filter>
+    </ClCompile>
+    <ClCompile Include="UDPserver.cpp">
+      <Filter>소스 파일\Server</Filter>
+    </ClCompile>
+    <ClCompile Include="SOCKETINFO.cpp">
+      <Filter>소스 파일\Client</Filter>
+    </ClCompile>
+    <ClCompile Include="ClientRoom.cpp">
+      <Filter>소스 파일\Client</Filter>
+    </ClCompile>
+    <ClCompile Include="DataToConnectWithClient.cpp">
+      <Filter>소스 파일\Client</Filter>
+    </ClCompile>
+    <ClCompile Include="ServerComponent.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="InputManager.cpp">
+      <Filter>소스 파일\Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="Dispatcher.cpp">
+      <Filter>소스 파일\Server</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="stdafx.h">
+      <Filter>헤더 파일\Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="IOCPserver.h">
+      <Filter>헤더 파일\Server</Filter>
+    </ClInclude>
+    <ClInclude Include="Logs.h">
+      <Filter>헤더 파일\Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="ThreadSafeQueue.h">
+      <Filter>헤더 파일\Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="ThreadPool.h">
+      <Filter>헤더 파일\Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="Packet.h">
+      <Filter>헤더 파일\Packet</Filter>
+    </ClInclude>
+    <ClInclude Include="PacketProcess.h">
+      <Filter>헤더 파일\Packet</Filter>
+    </ClInclude>
+    <ClInclude Include="PacketProcessThreadPool.h">
+      <Filter>헤더 파일\Server</Filter>
+    </ClInclude>
+    <ClInclude Include="UDPserver.h">
+      <Filter>헤더 파일\Server</Filter>
+    </ClInclude>
+    <ClInclude Include="SOCKETINFO.h">
+      <Filter>헤더 파일\Client</Filter>
+    </ClInclude>
+    <ClInclude Include="ClientRoom.h">
+      <Filter>헤더 파일\Client</Filter>
+    </ClInclude>
+    <ClInclude Include="DataToConnectWithClient.h">
+      <Filter>헤더 파일\Client</Filter>
+    </ClInclude>
+    <ClInclude Include="ServerComponent.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="InputManager.h">
+      <Filter>헤더 파일\Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="Dispatcher.h">
+      <Filter>헤더 파일\Server</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
