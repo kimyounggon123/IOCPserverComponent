@@ -6,7 +6,6 @@ packetProcess(process), dispatcher(Dispatcher::getInstance())
 bool PacketProcessThreadPool::initialize()
 {
 	if (!ThreadPool::initialize()) return false;
-
 	if (packetProcess == nullptr || !packetProcess->getInitialized()) return false;
 
 	return true;

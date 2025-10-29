@@ -77,9 +77,6 @@ class DBconnector
 	HANDLE hThread;
 	DWORD dwThreadID;
 
-	char recv_buf[BUFFERSIZE + 1];
-	char send_buf[BUFFERSIZE + 1];
-
 	HANDLE hEvent;
 
 	IOCPSessionManager& sessionManager;

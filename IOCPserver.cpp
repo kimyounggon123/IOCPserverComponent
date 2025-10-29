@@ -28,9 +28,9 @@ bool IOCPserver::initialize()
 		if (sockV4 == INVALID_SOCKET) throw "WSASocket()";
 
 		INT retval;
-		BOOL optval = TRUE;
+		int optval = 1;
 		retval = setsockopt(sockV4, SOL_SOCKET, SO_REUSEADDR,
-			(char*)&optval, sizeof(BOOL));
+			(char*)&optval, sizeof(optval));
 		if (retval == SOCKET_ERROR) throw "setsockopt()";
 
 		// 2.  binding socket
@@ -225,6 +225,11 @@ unsigned int WINAPI IOCPserver::workerThread(LPVOID server_info)
 				continue;
 			}
 
+			if (io->ioType == IO_TYPE::Response)
+			{
+				socketinfo->setSendEvent();
+			}
+
 			// 서버/클라이언트 강제 종료 시
 			if (retval == 0)
 			{
@@ -264,13 +269,9 @@ unsigned int WINAPI IOCPserver::workerThread(LPVOID server_info)
 			{
 				This->makePacketFromIOresult(socketinfo, cbTransferred);
 				if (!This->recvFromSOCKETINFO(socketinfo)) throw "request()";
-				if (socketinfo) socketinfo->updateActivity();
+				socketinfo->updateActivity();
 			}
 
-			if (io->ioType == IO_TYPE::Response)
-			{
-				if (socketinfo) socketinfo->setEvent();
-			}
 		}
 
 		catch (const char* msg)
@@ -354,13 +355,18 @@ bool IOCPserver::makePacketFromIOresult(SOCKETINFO* ptr, DWORD cbTransferred)
 
 			if (isGateClosed.load()) input->packet->set_header_type(PacketType::ServerIsClosed);
 			if (!dispatcher.enqueue(input, QueueInformation::PacketProcess)) throw "enqueue()";
-			ptr->addRequestCount();
+			ptr->addResponseCount();
 		}
 	}
 
 	catch (const char* msg)
 	{
-		if (input != nullptr) dispatcher.push(input);
+		if (input != nullptr)
+		{
+			printf("cbTransferred: %d\n", cbTransferred);
+			printf("offset: %lld\n", offset);
+			dispatcher.push(input);
+		}
 		result = logs.log_error(msg, "makePacketFromIOresult()");
 		return result;
 	}
@@ -382,22 +388,24 @@ unsigned int SendManager::workLoop()
 {
 	while (!exit_flag.load())
 	{
+		SOCKETINFO* ptr = nullptr;
 		TaskQueueInput* output = nullptr;
+
 		try
 		{
 			if (!dispatcher.dequeue(output, QueueInformation::Send)) continue;
 			if (output == nullptr) throw "output error";
 			if (output->isInvalid()) throw "output field error";
+
+			if (output->sessionInfo->waitSendEvent() == WAIT_TIMEOUT) throw "waitMutex() time up";
 			output->packet->setClientID(0); // 클라이언트로 전송 시 패킷에 저장된 client id를 초기화시킴
 
 			// Serialize
-			int pk_len;
-			ERROR_CODE err = output->packet->serialize(output->sessionInfo->response.IO_buffer, pk_len);
+			ERROR_CODE err = output->packet->serialize(output->sessionInfo->response.IO_buffer);
 			if (!err) throw "Serialize fail";
-			output->sessionInfo->response.reset_overlapped(output->sessionInfo->response.IO_buffer, pk_len);
 
 
-			if (output->sessionInfo->waitEvent() == WAIT_TIMEOUT) throw "waitMutex() time up";
+			output->sessionInfo->response.reset_overlapped(output->sessionInfo->response.IO_buffer, output->packet->getPacketSerializedLength());
 			
 			// Sending data
 			INT retval;
@@ -417,7 +425,7 @@ unsigned int SendManager::workLoop()
 
 		if (output != nullptr)
 		{
-			if (output->sessionInfo != nullptr)	output->sessionInfo->subRequestCount();
+			if (output->sessionInfo != nullptr)	output->sessionInfo->subResponseCount();
 			dispatcher.push(output);
 		}
 	}
@@ -432,9 +440,6 @@ DBconnector::DBconnector(USHORT DBserverPort, PacketProcessThreadPool* packetThr
 	hEvent = WSACreateEvent();
 	hThread = NULL;
 	dwThreadID = 0;
-	
-	memset(recv_buf, 0, BUFFERSIZE + 1);
-	memset(send_buf, 0, BUFFERSIZE + 1);
 }
 DBconnector::~DBconnector()
 {
@@ -505,7 +510,8 @@ INT DBconnector::send_to_DB() {
 	INT retval = 0;
 
 	TaskQueueInput* output = nullptr;
-	int serialize_size = 0;
+
+	char send_buf[BUFFERSIZE + 1];
 	try {
 		if (!dispatcher.dequeue(output, QueueInformation::Database)) return 0;
 		if (output == nullptr) throw "output error";
@@ -513,11 +519,11 @@ INT DBconnector::send_to_DB() {
 
 		// serialize
 		output->packet->setClientID(output->sessionInfo->id); // 후에 클라이언트 조회를 위해 패킷에 클라이언트 id input
-		ERROR_CODE code = output->packet->serialize(send_buf, serialize_size);
+		ERROR_CODE code = output->packet->serialize(send_buf);
 		if (code != ERROR_CODE::SUCCESS) throw "serialize";
 
 		// send packet 
-		retval = send(sock, send_buf, serialize_size, 0);
+		retval = send(sock, send_buf, output->packet->getPacketSerializedLength(), 0);
 		if (retval == SOCKET_ERROR) throw "send()";
 	}
 	catch (const char* msg) {
@@ -568,6 +574,7 @@ INT DBconnector::recv_from_DB() {
 
 	int recv_len = 0; // 현재까지 수신된 데이터
 	size_t offset = 0; // 읽는 버퍼의 위치
+	char recv_buf[BUFFERSIZE + 1];
 
 	try {
 		retval = recv(sock, recv_buf + recv_len, BUFFERSIZE - recv_len, 0);

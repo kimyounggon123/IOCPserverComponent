@@ -24,7 +24,8 @@ enum class PacketResult
 	Try,
 	WaitDatabase,
 	Success,
-	Fail
+	Fail,
+	BroadCast
 };
 
 #pragma pack(push, 1)   // 1바이트 단위로 정렬 시작
@@ -118,7 +119,7 @@ public:
 	ERROR_CODE readString(std::string& dest, size_t& offset);
 
 	/// <Serialize methods>
-	ERROR_CODE serialize(char* buffer, int& size);
+	ERROR_CODE serialize(char* buffer);
 	ERROR_CODE deserialize(const char* buffer, int recvLength, size_t& offset);
 
 	/// <getter / setter>
@@ -133,7 +134,7 @@ public:
 	int getClientID() noexcept { return header.clientID; }
 
 	int getContentsLength() noexcept { return header.length; }
-	int getPacketLength() noexcept { return sizeof(PacketHeader) + header.length; }
+	int getPacketSerializedLength() noexcept { return sizeof(PacketHeader) + header.length + sizeof(end_mark); }
 
 	// Debug method
 	void print_packet_contents(const char* where);

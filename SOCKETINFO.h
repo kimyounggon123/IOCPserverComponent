@@ -13,6 +13,7 @@
 #include "ThreadSafeQueue.h"
 #include "Logs.h"
 #include "Packet.h"
+
 // session control class
 enum class IO_TYPE { Request, Response };
 struct SOCKETINFO;
@@ -47,7 +48,6 @@ struct IO_CONTEXT {
 		owner = nullptr;
 	}
 
-
 	void reset_overlapped(char* buf = nullptr, ULONG len = 2 * BUFFERSIZE)
 	{
 		memset(&overlapped, 0, sizeof(OVERLAPPED));
@@ -66,13 +66,13 @@ struct SOCKETINFO {
 	IO_CONTEXT response;
 
 	std::atomic<bool> acceptCompleted;
-	std::atomic<int> requestCount;
+	std::atomic<int> responseCount; // 남아있는 Send Count
 	HANDLE hEvent;
 
 
 	SOCKETINFO() :
 		id(0), lastActive(GetTickCount64()),
-		acceptCompleted(false), requestCount(0),
+		acceptCompleted(false), responseCount(0),
 		sock(INVALID_SOCKET), addr{},
 		request(IO_TYPE::Request, this),
 		response(IO_TYPE::Response, this)
@@ -92,13 +92,14 @@ struct SOCKETINFO {
 		CloseHandle(hEvent);
 	}
 
-	DWORD waitEvent() { return WaitForSingleObject(hEvent, INFINITE); }
-	void setEvent() { SetEvent(hEvent); }
+	DWORD waitSendEvent() { return WaitForSingleObject(hEvent, 1000); }
+	void setSendEvent() { SetEvent(hEvent); }
 
 	void updateActivity() { lastActive = GetTickCount64(); }
 
-	void addRequestCount() { requestCount.fetch_add(1); }
-	void subRequestCount() { requestCount.fetch_sub(1); }
+	void addResponseCount() { responseCount.fetch_add(1); }
+	void subResponseCount() { responseCount.fetch_sub(1); }
+
 };
 
 struct UDPsession {
@@ -228,7 +229,7 @@ public:
 		{
 			SOCKETINFO* info = *it;
 
-			if (info->requestCount.load() == 0)
+			if (info->responseCount.load() == 0)
 			{
 				client_map.erase(info->id);
 				delete info;
