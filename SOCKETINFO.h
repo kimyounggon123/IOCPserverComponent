@@ -21,9 +21,18 @@ struct IO_CONTEXT {
 	IO_TYPE ioType;
 
 	WSABUF wsabuf;
-	char IO_buffer[1042];
+	char IO_buffer[2 * BUFFERSIZE];
 
 	SOCKETINFO* owner;
+
+
+	IO_CONTEXT() : ioType(IO_TYPE::Request), owner(nullptr),
+		IO_buffer{}
+	{
+		memset(&overlapped, 0, sizeof(OVERLAPPED));
+		wsabuf.buf = IO_buffer;
+		wsabuf.len = 2 * BUFFERSIZE;
+	}
 
 	IO_CONTEXT(IO_TYPE type, SOCKETINFO* owner) : ioType(type), owner(owner),
 		IO_buffer{}
@@ -34,10 +43,10 @@ struct IO_CONTEXT {
 	}
 
 	~IO_CONTEXT()
-	{}
+	{
+		owner = nullptr;
+	}
 
-	IO_CONTEXT(const IO_CONTEXT&) = delete;
-	IO_CONTEXT& operator=(const IO_CONTEXT&) = delete;
 
 	void reset_overlapped(char* buf = nullptr, ULONG len = 2 * BUFFERSIZE)
 	{
@@ -57,20 +66,25 @@ struct SOCKETINFO {
 	IO_CONTEXT response;
 
 	std::atomic<bool> acceptCompleted;
-
+	std::atomic<int> requestCount;
 	HANDLE hEvent;
+
 
 	SOCKETINFO() :
 		id(0), lastActive(GetTickCount64()),
-		request(IO_TYPE::Request, this), response(IO_TYPE::Response, this), acceptCompleted(false),
-		sock(INVALID_SOCKET), addr{}
+		acceptCompleted(false), requestCount(0),
+		sock(INVALID_SOCKET), addr{},
+		request(IO_TYPE::Request, this),
+		response(IO_TYPE::Response, this)
 	{
 		hEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
 		if (hEvent != NULL) SetEvent(hEvent);
-		//sock = WSASocket(AF_INET, SOCK_STREAM, 0, nullptr, 0, WSA_FLAG_OVERLAPPED);
 	}
+
 	~SOCKETINFO()
 	{
+		request.owner = nullptr;
+		response.owner = nullptr;
 		shutdown(sock, SD_BOTH);
 		closesocket(sock);
 		sock = INVALID_SOCKET;
@@ -78,12 +92,13 @@ struct SOCKETINFO {
 		CloseHandle(hEvent);
 	}
 
-	bool response_proc();
-
 	DWORD waitEvent() { return WaitForSingleObject(hEvent, INFINITE); }
 	void setEvent() { SetEvent(hEvent); }
 
 	void updateActivity() { lastActive = GetTickCount64(); }
+
+	void addRequestCount() { requestCount.fetch_add(1); }
+	void subRequestCount() { requestCount.fetch_sub(1); }
 };
 
 struct UDPsession {
@@ -91,30 +106,27 @@ struct UDPsession {
 	SOCKADDR_IN addr;
 	ULONGLONG lastActive;
 
-
+	std::atomic<int> requestCount;
 	UDPsession(const SOCKADDR_IN& addr) :
 		id(0), addr(addr), lastActive(GetTickCount64())
 	{}
-
-	bool response_proc();
 	void updateActivity() { lastActive = GetTickCount64(); }
 };
 
 
 // SOCKETINFO containor
-template <typename T>
-class ClientSessionManager
+class IOCPSessionManager
 {
-	int next_id;
-	int countClient;
-	std::unordered_map<int, T>	client_map; // 현재 접속한 클라이언트 목록들
+	std::atomic<int> next_id;
+	std::atomic<int> countClient;
+	std::unordered_map<int, SOCKETINFO*>	client_map; // 현재 접속한 클라이언트 목록들
 	CRITICAL_SECTION map_cs;
 
-	std::vector<T>deletedClients;
+	std::vector<SOCKETINFO*>deletedClients;
 	CRITICAL_SECTION deleteCS;
 
-	static ClientSessionManager<T>* instance;
-	ClientSessionManager() : next_id(1), countClient(0)
+	static IOCPSessionManager* instance;
+	IOCPSessionManager() : next_id(0), countClient(0)
 	{
 		InitializeCriticalSection(&map_cs);
 		InitializeCriticalSection(&deleteCS);
@@ -122,47 +134,47 @@ class ClientSessionManager
 public:
 
 	// deny copy
-	ClientSessionManager(const ClientSessionManager&) = delete;
-	ClientSessionManager& operator=(const ClientSessionManager&) = delete;
+	IOCPSessionManager(const IOCPSessionManager&) = delete;
+	IOCPSessionManager& operator=(const IOCPSessionManager&) = delete;
 
-	static ClientSessionManager<T>& getInstance()
+	static IOCPSessionManager& getInstance()
 	{
-		if (instance == nullptr) instance = new ClientSessionManager<T>;
+		if (instance == nullptr) instance = new IOCPSessionManager;
 		return *instance;
 	}
-	~ClientSessionManager()
+	~IOCPSessionManager()
 	{
 		delete_all();
+		destroyInvalidSOCKETINFO();
 		DeleteCriticalSection(&map_cs);
 		DeleteCriticalSection(&deleteCS);
 	}
 
 
-	bool input_socketinfo(T client_info)
+	bool input_socketinfo(SOCKETINFO* client_info)
 	{
 		EnterCriticalSection(&map_cs);
 
-		client_info->id = next_id; // input current integer id at clientinfo
-		auto pair = client_map.emplace(client_info->id, client_info);
-		if (!pair.second) // 삽입 실패 시
-		{
+		int id = next_id.fetch_add(1); // 안전하게 id 할당
+		client_info->id = id;
+
+		auto pair = client_map.emplace(id, client_info);
+		if (!pair.second) {
 			LeaveCriticalSection(&map_cs);
 			return false;
 		}
-		next_id++; // increase next id
-		countClient++;
-		LeaveCriticalSection(&map_cs);
 
+		countClient.fetch_add(1);
+		LeaveCriticalSection(&map_cs);
 		return true;
 	}
 
-	bool find_socketinfo(int id, T& found)
+	bool find_socketinfo(int id, SOCKETINFO*& found)
 	{
 		bool result = false;
 		EnterCriticalSection(&map_cs);
 
 		auto it = client_map.find(id);
-
 		if (it != client_map.end())
 		{
 			found = it->second;
@@ -170,7 +182,6 @@ public:
 		}
 
 		LeaveCriticalSection(&map_cs);
-
 		return result;
 	}
 
@@ -191,39 +202,44 @@ public:
 	bool delete_socketinfo(int id)
 	{
 		EnterCriticalSection(&map_cs);
+		EnterCriticalSection(&deleteCS);
+
+		bool result = false;
 
 		auto it = client_map.find(id);
-		if (it == client_map.end())
+		if (it != client_map.end())
 		{
-			LeaveCriticalSection(&map_cs);
-			return false;
+			countClient.fetch_sub(1);
+			deletedClients.push_back(it->second);
+			result = true;
 		}
 
-		// 실 삭제가 아니라 그냥 id만 유효하지 않은 값으로 바꿀까?
-		it->second->id = 0;
-		//delete it->second;
-		//client_map.erase(it);
-
-		countClient--;
+		LeaveCriticalSection(&deleteCS);
 		LeaveCriticalSection(&map_cs);
-
-		return true;
+		return result;
 	}
 
-	void destroyInvalid()
+	void destroyInvalidSOCKETINFO()
 	{
 		EnterCriticalSection(&map_cs);
+		EnterCriticalSection(&deleteCS);
 
-		
-		for (auto it = client_map.begin(); it != client_map.end(); it++)
+		for (auto it = deletedClients.begin(); it != deletedClients.end(); )
 		{
-			if (it->second->id == 0)
+			SOCKETINFO* info = *it;
+
+			if (info->requestCount.load() == 0)
 			{
-				delete it->second;
-				client_map.erase(it);
+				client_map.erase(info->id);
+				delete info;
+				it = deletedClients.erase(it);
+			}
+			else
+			{
+				++it;
 			}
 		}
-		
+		LeaveCriticalSection(&deleteCS);
 		LeaveCriticalSection(&map_cs);
 	}
 
@@ -233,17 +249,13 @@ public:
 		for (auto it = client_map.begin(); it != client_map.end(); )
 		{
 			delete it->second;
-			client_map.erase(it);
+			it = client_map.erase(it);
 		}
 		LeaveCriticalSection(&map_cs);
 	}
 
 
-	int getClientCount() const {
-		return countClient;
-	}
+	int getClientCount() const { return countClient; }
 };
 
-using IOCPSessionManager = ClientSessionManager<SOCKETINFO*>;
-using UdpSessionManager = ClientSessionManager<UDPsession*>;
 #endif

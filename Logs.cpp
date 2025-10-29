@@ -114,8 +114,6 @@ void Logs::showHeapWalk()
 		}
 	}
 
-	double avgFreeBlock = (freeBlocks > 0) ? (double)totalFree / freeBlocks : 0.0;
-	double fragmentation = 1.0 - (avgFreeBlock / (double)totalFree); // 0~1 »çÀÌ
 
 	double usedRatio = 0.0;
 	if (totalUsed + totalFree > 0)
@@ -123,7 +121,6 @@ void Logs::showHeapWalk()
 
 
 	_tprintf(_T("--------------------<Heap Information>--------------------\n"));
-	_tprintf(_T("Heap fragmentation: %.2f%%\n"), fragmentation);
 	_tprintf(_T("Used heap: %.2f%%\n"),	usedRatio);
 	_tprintf(_T("Used blocks: %llu / totalUsed bytes: %llu\n"),
 		(unsigned long long)usedBlocks, (unsigned long long)totalUsed);

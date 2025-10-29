@@ -1,7 +1,7 @@
 #include "IOCPserver.h"
 
 
-IOCPserver::IOCPserver(USHORT port_num, PacketProcessThreadPool* packetThreadPool) :
+IOCPserver::IOCPserver(USHORT port_num, PacketProcessThreadPool* packetThreadPool) : serverPtr(0),
 	IOCP(NULL), exit_flag(false), isGateClosed(false), countThreads(0), port(port_num),
 	sockV4(INVALID_SOCKET), addrV4{}, logs(Logs::getInstance()), 
 	sessionManager(IOCPSessionManager::getInstance()), dispatcher(Dispatcher::getInstance())
@@ -21,6 +21,8 @@ bool IOCPserver::initialize()
 {
 	try
 	{
+		serverPtr = (ULONG_PTR)this;
+
 		// 1. make a socket
 		sockV4 = WSASocket(AF_INET, SOCK_STREAM, 0, nullptr, 0, WSA_FLAG_OVERLAPPED);
 		if (sockV4 == INVALID_SOCKET) throw "WSASocket()";
@@ -49,7 +51,7 @@ bool IOCPserver::initialize()
 		if (IOCP)  _tprintf(_T("IOCP Handle Address: %p\n"), IOCP);
 		else throw "IOCP error!";
 
-		HANDLE h = CreateIoCompletionPort((HANDLE)sockV4, IOCP, (ULONG_PTR)this, 0);
+		HANDLE h = CreateIoCompletionPort((HANDLE)sockV4, IOCP, serverPtr, 0);
 		if (h != IOCP) throw "CreateIoCompletionPort() bind failed";
 
 		// 3. Make IOCP thread pool
@@ -87,7 +89,7 @@ bool IOCPserver::Start()
 		}
 
 		// AcceptEx ver. 미리 client socket 제작 후 등록
-		for (int i = 0; i < countThreads * 2; i++)
+		for (int i = 0; i < countThreads * 3; i++)
 		{
 			if (!makeClientSocket())
 			{
@@ -134,7 +136,6 @@ bool IOCPserver::makeClientSocket()
 		// if (!isGateOpen.load()) throw "Gate is closed.";
 		ptr = new SOCKETINFO;
 		if (!ptr) throw "memory limit";
-
 		BOOL retval;
 
 		// AcceptEx 함수 포인터 가져오기
@@ -153,7 +154,6 @@ bool IOCPserver::makeClientSocket()
 		{
 			throw "WSASocket() failed";
 		}
-
 		CreateIoCompletionPort((HANDLE)ptr->sock, IOCP, (ULONG_PTR)ptr, 0);
 		ZeroMemory(&ptr->request.overlapped, sizeof(OVERLAPPED));
 
@@ -214,13 +214,16 @@ unsigned int WINAPI IOCPserver::workerThread(LPVOID server_info)
 		try {
 			// <Get IO result>
 			retval = GetQueuedCompletionStatus(IOCP, &cbTransferred, &key, &overlapped, INFINITE);
-			//printf("key=%zu overlapped=%p cbTransferred=%d retval=%d\n", key, overlapped, cbTransferred, retval);
 
-			if (This->exit_flag || key == 0 ||overlapped == nullptr)  continue;
+			if (This->exit_flag || key == 0 || overlapped == nullptr)  continue;
 
-			IO_CONTEXT* io = CONTAINING_RECORD(overlapped, IO_CONTEXT, overlapped); // 안전하게 OVERLAPPED를 IO_CONTEXT로 변경
+			IO_CONTEXT* io = reinterpret_cast<IO_CONTEXT*>(overlapped);
 			socketinfo = io->owner; // IO_CONTEXT에서 역추적
-			if (socketinfo == nullptr) continue;
+			
+			if (socketinfo == nullptr)
+			{
+				continue;
+			}
 
 			// 서버/클라이언트 강제 종료 시
 			if (retval == 0)
@@ -286,7 +289,8 @@ bool IOCPserver::welcomeClient(SOCKETINFO* ptr)
 	try
 	{
 		if (!ptr) throw "got nullptr";
-		if (setsockopt(ptr->sock, SOL_SOCKET, SO_UPDATE_ACCEPT_CONTEXT, (char*)&sockV4, sizeof(sockV4))) throw "setsockopt()";
+		if (setsockopt(ptr->sock, SOL_SOCKET, SO_UPDATE_ACCEPT_CONTEXT, (char*)&sockV4, sizeof(sockV4))) 
+			throw "setsockopt()";
 		makeClientSocket(); // 다음 AcceptEx를 위해 새 소켓 준비
 	}
 	catch (const char* msg)
@@ -323,8 +327,6 @@ bool IOCPserver::makePacketFromIOresult(SOCKETINFO* ptr, DWORD cbTransferred)
 {
 	if (!ptr) return false;
 
-	ptr->request.IO_buffer[cbTransferred] = '\0'; // close buffer
-
 	bool result = true;
 	TaskQueueInput* input = nullptr;
 	size_t offset = 0;
@@ -336,7 +338,7 @@ bool IOCPserver::makePacketFromIOresult(SOCKETINFO* ptr, DWORD cbTransferred)
 			if (!dispatcher.pop(input)) throw "memory limit";
 			if (input == nullptr) throw "input is nullptr!";
 			input->sessionInfo = ptr;
-			ERROR_CODE err = input->packet->deserialize(ptr->request.IO_buffer, cbTransferred, offset);
+			ERROR_CODE err = input->packet->deserialize(ptr->request.IO_buffer, cbTransferred - offset, offset);
 			if (!err)
 			{
 				if (err == ERROR_CODE::NEED_EXTRA_DATA) // 데이터가 덜 왔다면
@@ -352,6 +354,7 @@ bool IOCPserver::makePacketFromIOresult(SOCKETINFO* ptr, DWORD cbTransferred)
 
 			if (isGateClosed.load()) input->packet->set_header_type(PacketType::ServerIsClosed);
 			if (!dispatcher.enqueue(input, QueueInformation::PacketProcess)) throw "enqueue()";
+			ptr->addRequestCount();
 		}
 	}
 
@@ -412,7 +415,11 @@ unsigned int SendManager::workLoop()
 			logs.log_error(msg, "SendManager::work()");
 		}
 
-		if (output != nullptr)	dispatcher.push(output);
+		if (output != nullptr)
+		{
+			if (output->sessionInfo != nullptr)	output->sessionInfo->subRequestCount();
+			dispatcher.push(output);
+		}
 	}
 	return 0;
 }

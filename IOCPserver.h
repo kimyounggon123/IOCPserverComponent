@@ -12,6 +12,7 @@
 // get IO result / recv only
 class IOCPserver
 {
+	ULONG_PTR serverPtr;
 	std::atomic<bool> exit_flag;
 	std::atomic<bool> isGateClosed;
 	USHORT port;

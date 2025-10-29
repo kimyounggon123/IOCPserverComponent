@@ -58,7 +58,7 @@ bool PacketProcess::testPacketFunc(TaskQueueInput* input)
 bool PacketProcess::closedServerLogic(TaskQueueInput* input)
 {
 	if (input == nullptr) return logs.log_error("got nullptr");
-	//logs.log("Server is closed.");
+	logs.log("Server is closed.");
 	input->packet->set_process_result(PacketResult::Fail);
 	return true;
 }
