@@ -18,7 +18,7 @@
 #define CHAT_SERVER_PORT 5000
 #define GAME_PORT 4000
 
-class ServerComponent
+class ServerFramework
 {
 	bool exit_flag;
 	WSADATA wsadata;
@@ -42,7 +42,7 @@ class ServerComponent
 	void showCommands();
 public:
 
-	ServerComponent(PacketProcess* packetProc = nullptr, USHORT serverPort = 1000, USHORT dbSenderPort = 1001): exit_flag(false),
+	ServerFramework(PacketProcess* packetProc = nullptr, USHORT serverPort = 1000, USHORT dbSenderPort = 1001): exit_flag(false),
 		packetProc(packetProc), packetThreadPool(nullptr), iocp(nullptr),
 		dbSender(nullptr), sendManager(nullptr),
 		serverPort(serverPort), dbSenderPort(dbSenderPort), dispatcher(Dispatcher::getInstance()), sessionManager(IOCPSessionManager::getInstance()),
@@ -51,7 +51,7 @@ public:
 		if (WSAStartup(MAKEWORD(2, 2), &wsadata) != 0) return;
 	}
 
-	~ServerComponent()
+	~ServerFramework()
 	{
 		WSACleanup();
 		SAFE_FREE(iocp);

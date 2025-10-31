@@ -130,7 +130,7 @@ public:
 		if (queueEvent != NULL)
 		{
 			DWORD waitResult = WaitForSingleObject(queueEvent, howMuchWait);
-			if (waitResult == WAIT_TIMEOUT) return false;
+			if (waitResult != WAIT_OBJECT_0) return false;
 		}
 
 		EnterCriticalSection(&queue_cs);

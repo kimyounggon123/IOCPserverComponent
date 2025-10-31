@@ -227,6 +227,7 @@ unsigned int WINAPI IOCPserver::workerThread(LPVOID server_info)
 
 			if (io->ioType == IO_TYPE::Response)
 			{
+				socketinfo->subResponseCount();
 				socketinfo->setSendEvent();
 			}
 
@@ -332,30 +333,55 @@ bool IOCPserver::makePacketFromIOresult(SOCKETINFO* ptr, DWORD cbTransferred)
 	TaskQueueInput* input = nullptr;
 	size_t offset = 0;
 
+	const int MAX_RESYNC = 5;
+	int resyncCount = 0;
+
 	try 
 	{
-		while (cbTransferred - offset > 0) // 패킷 무결성 검증
+		while (cbTransferred > offset) // 패킷 무결성 검증
 		{
 			if (!dispatcher.pop(input)) throw "memory limit";
 			if (input == nullptr) throw "input is nullptr!";
 			input->sessionInfo = ptr;
-			ERROR_CODE err = input->packet->deserialize(ptr->request.IO_buffer, cbTransferred - offset, offset);
-			if (!err)
+
+			size_t localOffset = offset; 
+			//ERROR_CODE err = input->packet->deserialize(ptr->request.IO_buffer, cbTransferred - offset, offset);
+			ERROR_CODE err = input->packet->deserialize(ptr->request.IO_buffer, cbTransferred - localOffset, localOffset);
+			if (err == ERROR_CODE::NEED_EXTRA_DATA)
 			{
-				if (err == ERROR_CODE::NEED_EXTRA_DATA) // 데이터가 덜 왔다면
+				dispatcher.push(input);
+				break;
+			}
+			else if (err != ERROR_CODE::SUCCESS)
+			{
+				offset += 1; // 한 바이트씩 버리면서 다음 패킷 탐색 -> 그냥 전부 날려버릴까?
+				resyncCount++;
+				dispatcher.push(input);
+				if (resyncCount >= MAX_RESYNC)
 				{
-					dispatcher.push(input);
+					// 너무 많이 재동기화 했으면 남은 데이터 모두 버림
+					offset = cbTransferred;
 					break;
 				}
-				else
-				{
-					throw "deserialize()"; // 기타 오류 발생 시
-				}
+				continue;
 			}
 
+			/*
+			else if (err == ERROR_CODE::OPENED_PACKET)
+			{
+				offset += 1; // 한 바이트씩 버리면서 다음 패킷 탐색 -> 그냥 전부 날려버릴까?
+				dispatcher.push(input);
+				continue;
+			}
+			else if (err != ERROR_CODE::SUCCESS)
+			{
+				throw "deserialize()"; // 기타 오류
+			}
+			*/
 			if (isGateClosed.load()) input->packet->set_header_type(PacketType::ServerIsClosed);
 			if (!dispatcher.enqueue(input, QueueInformation::PacketProcess)) throw "enqueue()";
-			ptr->addResponseCount();
+
+			offset = localOffset;
 		}
 	}
 
@@ -363,11 +389,11 @@ bool IOCPserver::makePacketFromIOresult(SOCKETINFO* ptr, DWORD cbTransferred)
 	{
 		if (input != nullptr)
 		{
-			printf("cbTransferred: %d\n", cbTransferred);
-			printf("offset: %lld\n", offset);
 			dispatcher.push(input);
 		}
 		result = logs.log_error(msg, "makePacketFromIOresult()");
+		offset = 0;
+		cbTransferred = 0;
 		return result;
 	}
 
@@ -397,13 +423,20 @@ unsigned int SendManager::workLoop()
 			if (output == nullptr) throw "output error";
 			if (output->isInvalid()) throw "output field error";
 
-			if (output->sessionInfo->waitSendEvent() == WAIT_TIMEOUT) throw "waitMutex() time up";
+			DWORD waitResult = output->sessionInfo->waitSendEvent();
+			if (waitResult != WAIT_OBJECT_0)
+			{
+				if (waitResult == WAIT_TIMEOUT)	throw "waitMutex() time up";
+				if (waitResult == WAIT_FAILED) throw "waitSendEvent() failed";
+			}
+
+			output->sessionInfo->addResponseCount(); // 전송 카운트 추가
+
 			output->packet->setClientID(0); // 클라이언트로 전송 시 패킷에 저장된 client id를 초기화시킴
 
 			// Serialize
 			ERROR_CODE err = output->packet->serialize(output->sessionInfo->response.IO_buffer);
 			if (!err) throw "Serialize fail";
-
 
 			output->sessionInfo->response.reset_overlapped(output->sessionInfo->response.IO_buffer, output->packet->getPacketSerializedLength());
 			
@@ -413,7 +446,8 @@ unsigned int SendManager::workLoop()
 			retval = WSASend(output->sessionInfo->sock, &output->sessionInfo->response.wsabuf, 1, &sendbytes,
 				0, &output->sessionInfo->response.overlapped, NULL);
 			if (retval == SOCKET_ERROR) {
-				if (WSAGetLastError() != WSA_IO_PENDING) {
+				if (WSAGetLastError() != WSA_IO_PENDING) 
+				{
 					throw "WSASend()";
 				}
 			}
@@ -425,7 +459,6 @@ unsigned int SendManager::workLoop()
 
 		if (output != nullptr)
 		{
-			if (output->sessionInfo != nullptr)	output->sessionInfo->subResponseCount();
 			dispatcher.push(output);
 		}
 	}

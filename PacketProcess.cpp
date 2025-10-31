@@ -45,13 +45,11 @@ bool PacketProcess::testPacketFunc(TaskQueueInput* input)
 {
 	if (input == nullptr) return logs.log_error("got nullptr");
 
-	volatile double result = 0;
-	for (int i = 0; i < 10000; ++i)
+	volatile double result = 0; // 부하를 위한 컴파일러 최적화 최소화
+	for (int i = 0; i < 10000; ++i) // 
 		result += sqrt(i * 1.23);
 
 	input->packet->set_process_result(PacketResult::Success);
-	//printf("test: %lf (Who: %p)\n", result, input);
-	//fflush(stdout);
 	return true;
 }
 

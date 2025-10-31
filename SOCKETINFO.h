@@ -57,38 +57,39 @@ struct IO_CONTEXT {
 };
 
 struct SOCKETINFO {
-	int id; // unique integer id in this server
-	ULONGLONG lastActive; // get last connection time
-
+	int id;
+	ULONGLONG lastActive;
 	SOCKET sock;
 	SOCKADDR_IN addr;
+
+	std::atomic<bool> acceptCompleted;
+	std::atomic<int> responseCount;
+
+	HANDLE hEvent;
+
 	IO_CONTEXT request;
 	IO_CONTEXT response;
 
-	std::atomic<bool> acceptCompleted;
-	std::atomic<int> responseCount; // 남아있는 Send Count
-	HANDLE hEvent;
-
-
-	SOCKETINFO() :
-		id(0), lastActive(GetTickCount64()),
-		acceptCompleted(false), responseCount(0),
-		sock(INVALID_SOCKET), addr{},
-		request(IO_TYPE::Request, this),
-		response(IO_TYPE::Response, this)
+	SOCKETINFO()
+		: id(0),
+		lastActive(GetTickCount64()),
+		acceptCompleted(false),
+		responseCount(0),
+		sock(INVALID_SOCKET),
+		addr{}
 	{
 		hEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
 		if (hEvent != NULL) SetEvent(hEvent);
+
+		// 모든 멤버 초기화 이후에 생성
+		request = IO_CONTEXT(IO_TYPE::Request, this);
+		response = IO_CONTEXT(IO_TYPE::Response, this);
 	}
 
 	~SOCKETINFO()
 	{
 		request.owner = nullptr;
 		response.owner = nullptr;
-		shutdown(sock, SD_BOTH);
-		closesocket(sock);
-		sock = INVALID_SOCKET;
-		addr = {};
 		CloseHandle(hEvent);
 	}
 
@@ -100,6 +101,12 @@ struct SOCKETINFO {
 	void addResponseCount() { responseCount.fetch_add(1); }
 	void subResponseCount() { responseCount.fetch_sub(1); }
 
+	void cleanupSession()
+	{
+		CancelIoEx((HANDLE)sock, NULL);
+		shutdown(sock, SD_BOTH);
+		closesocket(sock);
+	}
 };
 
 struct UDPsession {
@@ -232,6 +239,7 @@ public:
 			if (info->responseCount.load() == 0)
 			{
 				client_map.erase(info->id);
+				info->cleanupSession();
 				delete info;
 				it = deletedClients.erase(it);
 			}
@@ -255,7 +263,7 @@ public:
 		LeaveCriticalSection(&map_cs);
 	}
 
-
+	size_t getDeleteNum() const { return deletedClients.size(); }
 	int getClientCount() const { return countClient; }
 };
 

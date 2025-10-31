@@ -1,6 +1,6 @@
-#include "ServerComponent.h"
+#include "ServerFramework.h"
 
-bool ServerComponent::initialize(bool useDBconnector)
+bool ServerFramework::initialize(bool useDBconnector)
 {
 	try
 	{
@@ -28,7 +28,7 @@ bool ServerComponent::initialize(bool useDBconnector)
 }
 
 // Make threads
-bool ServerComponent::Start()
+bool ServerFramework::Start()
 {
 	try
 	{
@@ -45,7 +45,7 @@ bool ServerComponent::Start()
 	return true;
 }
 
-void ServerComponent::WorkDebugger()
+void ServerFramework::WorkDebugger()
 {
 	_tprintf(_T("KeyInput mode is working.\n"));
 	_tprintf(_T("[Commands] You can use [ctrl + a] to write all commands on this window.\n"));
@@ -73,6 +73,8 @@ void ServerComponent::WorkDebugger()
 			if (input.isKeyDown('H')) logs.showHeapWalk();
 
 			if (input.isKeyDown('M')) logs.showMemoryUsage("Server");
+
+			if (input.isKeyDown('D')) printf("delete list Count %lld\n", sessionManager.getDeleteNum());
 		}
 
 		sessionManager.destroyInvalidSOCKETINFO();
@@ -82,7 +84,7 @@ void ServerComponent::WorkDebugger()
 	_tprintf(_T("Leave the server.\n"));
 }
 
-void ServerComponent::Quit()
+void ServerFramework::Quit()
 {
 	if (iocp) iocp->Quit();
 	if (dbSender) dbSender->Quit();
@@ -91,7 +93,7 @@ void ServerComponent::Quit()
 	dispatcher.undoAllQueue();
 }
 
-void ServerComponent::Run()
+void ServerFramework::Run()
 {
 	Start();
 	WorkDebugger();
@@ -99,7 +101,7 @@ void ServerComponent::Run()
 }
 
 
-void ServerComponent::showCommands()
+void ServerFramework::showCommands()
 {
 	_tprintf(_T("\n-----------------------------<Commands list>---------------------------------\n"));
 	_tprintf(_T("[ctrl + a]: Show all commands.\n"));
