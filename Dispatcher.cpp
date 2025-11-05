@@ -2,7 +2,7 @@
 Dispatcher* Dispatcher::instance = nullptr;
 bool Dispatcher::initialize()
 {
-	for (int i = 0; i < 1000; i++)
+	for (int i = 0; i < 10000; i++)
 	{
 		TaskQueueInput* task = new TaskQueueInput();
 		if (!task) return false;
