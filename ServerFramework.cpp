@@ -1,6 +1,6 @@
-#include "ServerComponent.h"
+#include "ServerFramework.h"
 
-bool ServerComponent::initialize(bool useDBconnector)
+bool ServerFramework::initialize()
 {
 	try
 	{
@@ -10,11 +10,9 @@ bool ServerComponent::initialize(bool useDBconnector)
 
 		packetThreadPool = new PacketProcessThreadPool(10, packetProc);
 		iocp = new IOCPserver(serverPort, packetThreadPool);
-		sendManager = new SendManager(10, packetThreadPool);
-		if (useDBconnector) dbSender = new DBconnector(dbSenderPort, packetThreadPool);
+		sendManager = new SendManager(10);
 
 		if (iocp && !iocp->initialize()) throw "IOCP";
-		if (dbSender && !dbSender->initialize()) throw "DBconnector";
 		if (sendManager && !sendManager->initialize())  throw "SendManager";
 		if (packetThreadPool && !packetThreadPool->initialize()) throw "PacketThreadPool";
 		if (!dispatcher.initialize()) throw "Dispatcher";
@@ -28,12 +26,11 @@ bool ServerComponent::initialize(bool useDBconnector)
 }
 
 // Make threads
-bool ServerComponent::Start()
+bool ServerFramework::Start()
 {
 	try
 	{
 		if (iocp && !iocp->Start()) throw "IOCP";
-		if (dbSender && !dbSender->Start()) throw "DBconnector";
 		if (sendManager && !sendManager->Start())  throw "SendManager";
 		if (packetThreadPool && !packetThreadPool->Start()) throw "PacketThreadPool";
 	}
@@ -45,7 +42,7 @@ bool ServerComponent::Start()
 	return true;
 }
 
-void ServerComponent::WorkDebugger()
+void ServerFramework::WorkDebugger()
 {
 	_tprintf(_T("KeyInput mode is working.\n"));
 	_tprintf(_T("[Commands] You can use [ctrl + a] to write all commands on this window.\n"));
@@ -73,25 +70,26 @@ void ServerComponent::WorkDebugger()
 			if (input.isKeyDown('H')) logs.showHeapWalk();
 
 			if (input.isKeyDown('M')) logs.showMemoryUsage("Server");
+
+			if (input.isKeyDown('D')) printf("delete list Count %lld\n", sessionManager.getDeleteNum());
 		}
 
-		sessionManager.destroyInvalid();
+		sessionManager.destroyInvalidSOCKETINFO();
 		Sleep(50);
 	}
 
 	_tprintf(_T("Leave the server.\n"));
 }
 
-void ServerComponent::Quit()
+void ServerFramework::Quit()
 {
 	if (iocp) iocp->Quit();
-	if (dbSender) dbSender->Quit();
 	if (sendManager) sendManager->Quit();
 	if (packetThreadPool) packetThreadPool->Quit();
 	dispatcher.undoAllQueue();
 }
 
-void ServerComponent::Run()
+void ServerFramework::Run()
 {
 	Start();
 	WorkDebugger();
@@ -99,7 +97,7 @@ void ServerComponent::Run()
 }
 
 
-void ServerComponent::showCommands()
+void ServerFramework::showCommands()
 {
 	_tprintf(_T("\n-----------------------------<Commands list>---------------------------------\n"));
 	_tprintf(_T("[ctrl + a]: Show all commands.\n"));

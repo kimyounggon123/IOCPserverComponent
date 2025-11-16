@@ -217,12 +217,12 @@ void Packet::inputHeader(char* buffer, size_t& offset)
 	offset += sizeof(int32_t);
 }
 
-ERROR_CODE Packet::serialize(char* buffer, int& size) {
+ERROR_CODE Packet::serialize(char* buffer) {
 	// parameter buffer size를 체크해야 함
 	if (!buffer) return ERROR_CODE::GET_NULLPTR;
 
 	// check size
-	if (header.length < 0 || sizeof(bool) + sizeof(PacketType) + sizeof(PacketResult) + sizeof(int) + header.length + sizeof(int) > BUFFERSIZE) // BUFFERSIZE = packet max size
+	if (header.length < 0 || sizeof(PacketHeader) + header.length + sizeof(int) > BUFFERSIZE)
 		return ERROR_CODE::INCORRECT_SIZE;
 
 	/// Serialize part
@@ -234,9 +234,8 @@ ERROR_CODE Packet::serialize(char* buffer, int& size) {
 	memcpy(buffer + offset, data, header.length); // copy data
 	offset += static_cast<size_t>(header.length);
 
-	memcpy(buffer + offset, &end_mark, sizeof(int)); // input end mark. Don't consider this length.
-	offset += sizeof(int);
-	size = static_cast<int>(offset);
+	memcpy(buffer + offset, &end_mark, sizeof(end_mark)); // input end mark. Don't consider this length.
+	offset += sizeof(end_mark);
 
 	return ERROR_CODE::SUCCESS;
 }
@@ -261,38 +260,40 @@ void Packet::copyHeader(const char* buffer, size_t& offset)
 	header.length = ntohl(netLength);
 }
 
-ERROR_CODE Packet::deserialize(const char* buffer, int recvLength, size_t& offset) {
+ERROR_CODE Packet::deserialize(const char* buffer, int recvLength, size_t& offset)
+{
 	if (!buffer) return ERROR_CODE::GET_NULLPTR;
-	if (offset + sizeof(PacketHeader) > recvLength) return ERROR_CODE::NEED_EXTRA_DATA;
-	memset(this, 0, sizeof(Packet)); // clear packet
+	size_t localOffset = offset; // local 복사
 
-	/// copy header part
-	copyHeader(buffer, offset);
+	if (localOffset + sizeof(PacketHeader) > recvLength) return ERROR_CODE::NEED_EXTRA_DATA;
 
-	// packet length check
+	copyHeader(buffer, localOffset);
+
 	if (header.length < 0) return ERROR_CODE::INCORRECT_SIZE;
 
-	// header + data + end mark > buffersize
-	if (offset + header.length + sizeof(end_mark) > recvLength) return ERROR_CODE::NEED_EXTRA_DATA;
+	if (localOffset + header.length + sizeof(end_mark) > recvLength)
+		return ERROR_CODE::NEED_EXTRA_DATA;
 
-	// copy data
-	memcpy(data, buffer + offset, header.length); // copy data (null char also be copied)
-	offset += header.length;
+	memcpy(data, buffer + localOffset, header.length);
+	localOffset += header.length;
 
-	// 3. Verify End Mark
 	unsigned int received_end_mark = 0;
-	memcpy(&received_end_mark, buffer + offset, sizeof(received_end_mark));
+	memcpy(&received_end_mark, buffer + localOffset, sizeof(received_end_mark));
+
 	if (received_end_mark != end_mark)
 	{
-		printf("end_mark: 0x%08X\n", end_mark);
-		printf("received_end_mark: 0x%08X\n", received_end_mark); // hex 출력
+		//printf("received_end_mark: 0x%08X\n", received_end_mark); // hex 출력
+		//printf("header type: %d\n", header.type);
+		//printf("header length: %d\n", header.length);
 		return ERROR_CODE::OPENED_PACKET;
 	}
-	offset += sizeof(int);
+	localOffset += sizeof(end_mark);
 
+
+	// 성공적으로 읽었으면 offset을 실제로 증가시킴
+	offset = localOffset;
 	return ERROR_CODE::SUCCESS;
 }
-
 
 void Packet::print_packet_contents(const char* where) {
 	printf("\nPacket in[%s]\n", where);

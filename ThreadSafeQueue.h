@@ -18,7 +18,7 @@ public:
 	ThreadSafeStack(bool hasEvent = false, DWORD howMuchWait = INFINITE): howMuchWait(howMuchWait)
 	{
 		InitializeCriticalSection(&stack_cs);
-		stackEvent = hasEvent ? CreateEvent(NULL, TRUE, FALSE, NULL) : NULL;
+		stackEvent = hasEvent ? CreateEvent(NULL, FALSE, FALSE, NULL) : NULL;
 	}
 	~ThreadSafeStack()
 	{
@@ -61,14 +61,18 @@ public:
 
 
 		auto& val = safe_stack.top();
-		//std::cout << "Stack front: " << val << "\n"; // 값 확인
 		output = val;
+
+		//output = std::move(safe_queue.front());
 		safe_stack.pop();
 
-		if (stackEvent != NULL && safe_stack.empty())
-			ResetEvent(stackEvent); // 마지막 pop 후
-		
+		if (stackEvent != NULL && !safe_stack.empty())
+			SetEvent(stackEvent); // 마지막 pop 후 auto lock
 
+		/*
+		if (stackEvent != NULL && safe_stack.empty())
+			ResetEvent(stackEvent); // 마지막 pop 후 Manual lock
+		*/
 		LeaveCriticalSection(&stack_cs);
 
 		return true;
@@ -95,7 +99,7 @@ public:
 	ThreadSafeQueue(bool hasEvent = false, DWORD howMuchWait = INFINITE) : howMuchWait(howMuchWait)
 	{
 		InitializeCriticalSection(&queue_cs);
-		queueEvent = hasEvent ?  CreateEvent(NULL, TRUE, FALSE, NULL) : NULL;
+		queueEvent = hasEvent ?  CreateEvent(NULL, FALSE, FALSE, NULL) : NULL;
 	}
 	~ThreadSafeQueue()
 	{
@@ -115,9 +119,9 @@ public:
 	{
 		EnterCriticalSection(&queue_cs);
 		safe_queue.push(input);
-		if (queueEvent != NULL) SetEvent(queueEvent);
 		LeaveCriticalSection(&queue_cs);
 
+		if (queueEvent != NULL) SetEvent(queueEvent);
 		return true;
 	}
 
@@ -126,7 +130,7 @@ public:
 		if (queueEvent != NULL)
 		{
 			DWORD waitResult = WaitForSingleObject(queueEvent, howMuchWait);
-			if (waitResult == WAIT_TIMEOUT) return false;
+			if (waitResult != WAIT_OBJECT_0) return false;
 		}
 
 		EnterCriticalSection(&queue_cs);
@@ -139,13 +143,19 @@ public:
 		}
 
 		auto& val = safe_queue.front();
-		//std::cout << "Queue front: " << val << "\n"; // 값 확인
 		output = val;
+
+		//output = std::move(safe_queue.front());
 		safe_queue.pop();
 
+
+		if (queueEvent != NULL && !safe_queue.empty())
+			SetEvent(queueEvent); // 마지막 pop 후 manual lock
+
+		/*
 		if(queueEvent != NULL && safe_queue.empty())
-			ResetEvent(queueEvent); // 마지막 pop 후
-		
+			ResetEvent(queueEvent); // 마지막 pop 후 manual lock
+		*/
 		LeaveCriticalSection(&queue_cs);
 
 		return true;

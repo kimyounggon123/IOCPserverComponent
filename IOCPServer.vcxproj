@@ -123,10 +123,9 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="ClientRoom.cpp" />
     <ClCompile Include="Dispatcher.cpp" />
     <ClCompile Include="InputManager.cpp" />
-    <ClCompile Include="ServerComponent.cpp" />
+    <ClCompile Include="ServerFramework.cpp" />
     <ClCompile Include="DataToConnectWithClient.cpp" />
     <ClCompile Include="IOCPserver.cpp" />
     <ClCompile Include="Logs.cpp" />
@@ -139,10 +138,9 @@
     <ClCompile Include="UDPserver.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="ClientRoom.h" />
     <ClInclude Include="Dispatcher.h" />
     <ClInclude Include="InputManager.h" />
-    <ClInclude Include="ServerComponent.h" />
+    <ClInclude Include="ServerFramework.h" />
     <ClInclude Include="DataToConnectWithClient.h" />
     <ClInclude Include="PacketProcess.h" />
     <ClInclude Include="PacketProcessThreadPool.h" />
