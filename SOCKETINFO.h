@@ -57,7 +57,7 @@ struct IO_CONTEXT {
 };
 
 struct SOCKETINFO {
-	int id;
+	int id; // 일단 임시로 next id 형태로 등록하지만 원래는 DB에서 가져와야 함.
 	ULONGLONG lastActive;
 	SOCKET sock;
 	SOCKADDR_IN addr;
@@ -123,34 +123,29 @@ struct UDPsession {
 
 
 // SOCKETINFO containor
-class IOCPSessionManager
+class Room
 {
-	std::atomic<int> next_id;
+	std::atomic<int> next_id; // 임시용. 원래는 DB에 저장된 id를 입력해야 해서 이 부분이 불필요함.
 	std::atomic<int> countClient;
-	std::unordered_map<int, SOCKETINFO*>	client_map; // 현재 접속한 클라이언트 목록들
+	int maxClientsNum;
+
+	std::unordered_map<int, SOCKETINFO*> client_map; // 현재 접속한 클라이언트 목록들
 	CRITICAL_SECTION map_cs;
 
 	std::vector<SOCKETINFO*>deletedClients;
 	CRITICAL_SECTION deleteCS;
 
-	static IOCPSessionManager* instance;
-	IOCPSessionManager() : next_id(0), countClient(0)
+public:
+	Room(int maxClientsNum = -1) : next_id(0), countClient(0), maxClientsNum(maxClientsNum)
 	{
 		InitializeCriticalSection(&map_cs);
 		InitializeCriticalSection(&deleteCS);
 	}
-public:
-
 	// deny copy
-	IOCPSessionManager(const IOCPSessionManager&) = delete;
-	IOCPSessionManager& operator=(const IOCPSessionManager&) = delete;
+	Room(const Room&) = delete;
+	Room& operator=(const Room&) = delete;
 
-	static IOCPSessionManager& getInstance()
-	{
-		if (instance == nullptr) instance = new IOCPSessionManager;
-		return *instance;
-	}
-	~IOCPSessionManager()
+	~Room()
 	{
 		delete_all();
 		destroyInvalidSOCKETINFO();
@@ -158,11 +153,11 @@ public:
 		DeleteCriticalSection(&deleteCS);
 	}
 
-
 	bool input_socketinfo(SOCKETINFO* client_info)
 	{
-		EnterCriticalSection(&map_cs);
+		if (countClient.load() == maxClientsNum) return false;
 
+		EnterCriticalSection(&map_cs);
 		int id = next_id.fetch_add(1); // 안전하게 id 할당
 		client_info->id = id;
 
@@ -265,6 +260,32 @@ public:
 
 	size_t getDeleteNum() const { return deletedClients.size(); }
 	int getClientCount() const { return countClient; }
+
+	void EnterCriticalOutSide() { EnterCriticalSection(&map_cs); }
+	void LeaveCriticalOutSide() { LeaveCriticalSection(&map_cs); }
+
+	void CopyMemberPointers(std::vector<SOCKETINFO*>& out)
+	{
+		EnterCriticalSection(&map_cs);
+		out.reserve(client_map.size());
+		for (auto& pair : client_map)
+			out.push_back(pair.second);  // 포인터 얕은 복사
+		LeaveCriticalSection(&map_cs);
+	}
+};
+
+class IOCPSessionManager : public Room
+{
+	static IOCPSessionManager* instance;
+
+	IOCPSessionManager(): Room()
+	{ }
+public:
+	static IOCPSessionManager& getInstance()
+	{
+		if (instance == nullptr) instance = new IOCPSessionManager;
+		return *instance;
+	}
 };
 
 #endif

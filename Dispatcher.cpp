@@ -21,12 +21,6 @@ void Dispatcher::undoAllQueue()
 			taskPool.push(output);
 	}
 
-	while (!taskToSendDB.isEmpty())
-	{
-		if (taskToSendDB.dequeue(output))
-			taskPool.push(output);
-	}
-
 	while (!taskToSendClient.isEmpty())
 	{
 		if (taskToSendClient.dequeue(output))
@@ -56,10 +50,6 @@ bool Dispatcher::enqueue(TaskQueueInput*& input, const QueueInformation& where)
 		result = taskProcessWaiting.enqueue(input);
 		break;
 
-	case QueueInformation::Database:
-		result = taskToSendDB.enqueue(input);
-		break;
-
 	case QueueInformation::Send:
 		result = taskToSendClient.enqueue(input);
 		break;
@@ -82,10 +72,6 @@ bool Dispatcher::dequeue(TaskQueueInput*& output, const QueueInformation& where)
 		result = taskProcessWaiting.dequeue(output);
 		break;
 
-	case QueueInformation::Database:
-		result = taskToSendDB.dequeue(output);
-		break;
-
 	case QueueInformation::Send:
 		result = taskToSendClient.dequeue(output);
 		break;
@@ -105,10 +91,6 @@ bool Dispatcher::isEmpty(const QueueInformation & where)
 	{
 	case QueueInformation::PacketProcess:
 		result = taskProcessWaiting.isEmpty();
-		break;
-
-	case QueueInformation::Database:
-		result = taskToSendDB.isEmpty();
 		break;
 
 	case QueueInformation::Send:

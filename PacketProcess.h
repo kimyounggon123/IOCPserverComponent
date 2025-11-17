@@ -39,7 +39,7 @@ protected:
 
 	std::string hash_function(const char* key, const char* to_hash);
 public:
-	PacketProcess() : logs(Logs::getInstance()) , isInitialized(false)
+	PacketProcess() : logs(Logs::getInstance()), isInitialized(false)
 	{}
 
 	virtual ~PacketProcess()

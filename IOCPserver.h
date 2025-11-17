@@ -5,10 +5,6 @@
 #include <Ws2tcpip.h>  // for inet_pton or InetPton
 #include <mswsock.h>
 
-
-#define DB_SERVER_IP "127.0.0.1"
-
-
 // get IO result / recv only
 class IOCPserver
 {
@@ -58,44 +54,11 @@ class SendManager : public ThreadPool
 
 	unsigned int workLoop() override;
 public:
-	SendManager(int poolCapacity, PacketProcessThreadPool* pool) 
+	SendManager(int poolCapacity) 
 		: ThreadPool(poolCapacity), dispatcher(Dispatcher::getInstance())
 	{}
 
 	bool initialize() override;
-};
-
-// DBconnector 같은 경우에도 pool로 작업하는 것이 좋을까?
-class DBconnector
-{
-	std::atomic<bool> exit_flag;
-
-	USHORT serverPort;
-	SOCKET sock;
-	SOCKADDR_IN addr;
-
-	HANDLE hThread;
-	DWORD dwThreadID;
-
-	HANDLE hEvent;
-
-	IOCPSessionManager& sessionManager;
-	Logs& logs;
-	Dispatcher& dispatcher;
-
-	INT send_to_DB(); // 실제 패킷 삭제 함수
-	INT recv_from_DB(); // 실제 패킷 생성 함수
-	virtual bool make_pk_and_push(char* recv_buf, int recv_len, size_t& offset);
-
-public:
-	DBconnector(USHORT serverPort, PacketProcessThreadPool* packetThreadPool);
-	~DBconnector();
-
-	bool initialize();
-	bool Start();
-	void Quit();
-
-	static unsigned int WINAPI workerThread(LPVOID lpParam);
 };
 
 

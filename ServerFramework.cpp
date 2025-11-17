@@ -1,6 +1,6 @@
 #include "ServerFramework.h"
 
-bool ServerFramework::initialize(bool useDBconnector)
+bool ServerFramework::initialize()
 {
 	try
 	{
@@ -10,11 +10,9 @@ bool ServerFramework::initialize(bool useDBconnector)
 
 		packetThreadPool = new PacketProcessThreadPool(10, packetProc);
 		iocp = new IOCPserver(serverPort, packetThreadPool);
-		sendManager = new SendManager(10, packetThreadPool);
-		if (useDBconnector) dbSender = new DBconnector(dbSenderPort, packetThreadPool);
+		sendManager = new SendManager(10);
 
 		if (iocp && !iocp->initialize()) throw "IOCP";
-		if (dbSender && !dbSender->initialize()) throw "DBconnector";
 		if (sendManager && !sendManager->initialize())  throw "SendManager";
 		if (packetThreadPool && !packetThreadPool->initialize()) throw "PacketThreadPool";
 		if (!dispatcher.initialize()) throw "Dispatcher";
@@ -33,7 +31,6 @@ bool ServerFramework::Start()
 	try
 	{
 		if (iocp && !iocp->Start()) throw "IOCP";
-		if (dbSender && !dbSender->Start()) throw "DBconnector";
 		if (sendManager && !sendManager->Start())  throw "SendManager";
 		if (packetThreadPool && !packetThreadPool->Start()) throw "PacketThreadPool";
 	}
@@ -87,7 +84,6 @@ void ServerFramework::WorkDebugger()
 void ServerFramework::Quit()
 {
 	if (iocp) iocp->Quit();
-	if (dbSender) dbSender->Quit();
 	if (sendManager) sendManager->Quit();
 	if (packetThreadPool) packetThreadPool->Quit();
 	dispatcher.undoAllQueue();

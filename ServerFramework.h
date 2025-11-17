@@ -18,6 +18,9 @@
 #define CHAT_SERVER_PORT 5000
 #define GAME_PORT 4000
 
+
+// 기본 1:1 통신용 
+// 브로드캐스팅은 따로 상속 등으로 구현하세요.
 class ServerFramework
 {
 	bool exit_flag;
@@ -27,41 +30,41 @@ class ServerFramework
 	PacketProcessThreadPool* packetThreadPool;
 
 	IOCPserver* iocp; USHORT serverPort;
-	DBconnector* dbSender; USHORT dbSenderPort;
 	SendManager* sendManager;
 	Dispatcher& dispatcher;
 	IOCPSessionManager& sessionManager;
 
+protected:
+
 	Logs& logs;
 	InputManager& input;
-	
-	bool Start();
-	void WorkDebugger();
-	void Quit();
 
 	void showCommands();
+	
+	virtual bool Start();
+	void WorkDebugger();
+	virtual void Quit();
+
 public:
 
-	ServerFramework(PacketProcess* packetProc = nullptr, USHORT serverPort = 1000, USHORT dbSenderPort = 1001): exit_flag(false),
-		packetProc(packetProc), packetThreadPool(nullptr), iocp(nullptr),
-		dbSender(nullptr), sendManager(nullptr),
-		serverPort(serverPort), dbSenderPort(dbSenderPort), dispatcher(Dispatcher::getInstance()), sessionManager(IOCPSessionManager::getInstance()),
+	ServerFramework(PacketProcess* packetProc = nullptr, USHORT serverPort = 1000): exit_flag(false),
+		packetProc(packetProc), packetThreadPool(nullptr), iocp(nullptr), sendManager(nullptr),
+		serverPort(serverPort), dispatcher(Dispatcher::getInstance()), sessionManager(IOCPSessionManager::getInstance()),
 		logs(Logs::getInstance()), input(InputManager::getInstance())
 	{
 		if (WSAStartup(MAKEWORD(2, 2), &wsadata) != 0) return;
 	}
 
-	~ServerFramework()
+	virtual ~ServerFramework()
 	{
 		WSACleanup();
 		SAFE_FREE(iocp);
 		SAFE_FREE(sendManager);
-		SAFE_FREE(dbSender);
 		SAFE_FREE(packetThreadPool);
 		SAFE_FREE(packetProc);
 	}
 
-	bool initialize(bool useDBconnector = false);
+	virtual bool initialize();
 	void Run();
 };
 

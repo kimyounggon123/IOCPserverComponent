@@ -123,7 +123,6 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="ClientRoom.cpp" />
     <ClCompile Include="Dispatcher.cpp" />
     <ClCompile Include="InputManager.cpp" />
     <ClCompile Include="ServerFramework.cpp" />
@@ -139,7 +138,6 @@
     <ClCompile Include="UDPserver.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="ClientRoom.h" />
     <ClInclude Include="Dispatcher.h" />
     <ClInclude Include="InputManager.h" />
     <ClInclude Include="ServerFramework.h" />

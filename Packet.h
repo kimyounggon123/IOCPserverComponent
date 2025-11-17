@@ -16,10 +16,13 @@ enum class PacketType
 	LogIn,
 	LogOut,
 
-	BringMap
+	Hello,
+	Move,
+	FireBullet,
+	Dead
 };
 
-enum class PacketResult 
+enum class PacketResult
 {
 	Try,
 	WaitDatabase,
@@ -74,7 +77,6 @@ class Packet
 	void copyHeader(const char* buffer, size_t& offset);
 public:
 	static const unsigned int end_mark;
-	// static const int maxSize = 1042;
 
 	Packet(): header{}, data{}
 	{}

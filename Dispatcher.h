@@ -18,8 +18,8 @@ public:
 	TaskQueueInput& operator=(const TaskQueueInput& other)
 	{
 		if (this != &other) {
-			sessionInfo = other.sessionInfo;
-			packet = other.packet;
+			sessionInfo = other.sessionInfo; // session 정보는 deep copy하지 말도록.
+			*packet = *other.packet;
 		}
 		return *this;
 	}
@@ -36,7 +36,6 @@ public:
 enum class QueueInformation
 {
 	PacketProcess,
-	Database,
 	Send
 };
 
@@ -46,15 +45,12 @@ class Dispatcher
 {
 	static Dispatcher* instance;
 	Dispatcher(): taskPool(true),
-		taskProcessWaiting(true, 100), taskToSendDB(true, 100), taskToSendClient(true, 100)
+		taskProcessWaiting(true, 100), taskToSendClient(true, 100)
 	{}
 
-	ThreadSafeStack<TaskQueueInput*> taskPool; // 이 부분을 recv / send로 분리시킬까?
+	ThreadSafeStack<TaskQueueInput*> taskPool; // 전체 풀
 
 	ThreadSafeQueue<TaskQueueInput*> taskProcessWaiting; // server에서 받아온 패킷, 세션 정보
-
-	// result queues
-	ThreadSafeQueue<TaskQueueInput*> taskToSendDB; // DB 전송을 위한 작업 큐 / 만약 결과가 DB 작업을 요구한다면 여기서 패킷 검사 후 input
 	ThreadSafeQueue<TaskQueueInput*> taskToSendClient; // SendManager가 사용하는 큐 / 작업 완료 시 해당 큐에 input
 
 public:
