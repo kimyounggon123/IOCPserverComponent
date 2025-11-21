@@ -27,8 +27,7 @@ struct IO_CONTEXT {
 	SOCKETINFO* owner;
 
 
-	IO_CONTEXT() : ioType(IO_TYPE::Request), owner(nullptr),
-		IO_buffer{}
+	IO_CONTEXT() : ioType(IO_TYPE::Request), owner(nullptr), IO_buffer{}
 	{
 		memset(&overlapped, 0, sizeof(OVERLAPPED));
 		wsabuf.buf = IO_buffer;
@@ -56,11 +55,14 @@ struct IO_CONTEXT {
 	}
 };
 
+enum class SESSION_TYPE { TCP, UDP };
 struct SOCKETINFO {
 	int id; // 일단 임시로 next id 형태로 등록하지만 원래는 DB에서 가져와야 함.
 	ULONGLONG lastActive;
 	SOCKET sock;
 	SOCKADDR_IN addr;
+
+	SESSION_TYPE sessionType;
 
 	std::atomic<bool> acceptCompleted;
 	std::atomic<int> responseCount;
@@ -70,9 +72,10 @@ struct SOCKETINFO {
 	IO_CONTEXT request;
 	IO_CONTEXT response;
 
-	SOCKETINFO()
+	SOCKETINFO(SESSION_TYPE sessionType)
 		: id(0),
 		lastActive(GetTickCount64()),
+		sessionType(sessionType),
 		acceptCompleted(false),
 		responseCount(0),
 		sock(INVALID_SOCKET),
@@ -109,22 +112,12 @@ struct SOCKETINFO {
 	}
 };
 
-struct UDPsession {
-	int id;
-	SOCKADDR_IN addr;
-	ULONGLONG lastActive;
-
-	std::atomic<int> requestCount;
-	UDPsession(const SOCKADDR_IN& addr) :
-		id(0), addr(addr), lastActive(GetTickCount64())
-	{}
-	void updateActivity() { lastActive = GetTickCount64(); }
-};
 
 
 // SOCKETINFO containor
 class Room
 {
+	int roomID;
 	std::atomic<int> next_id; // 임시용. 원래는 DB에 저장된 id를 입력해야 해서 이 부분이 불필요함.
 	std::atomic<int> countClient;
 	int maxClientsNum;
@@ -136,11 +129,13 @@ class Room
 	CRITICAL_SECTION deleteCS;
 
 public:
-	Room(int maxClientsNum = -1) : next_id(0), countClient(0), maxClientsNum(maxClientsNum)
+	Room(int roomID, int maxClientsNum = -1) : roomID(roomID),
+		next_id(0), countClient(0), maxClientsNum(maxClientsNum)
 	{
 		InitializeCriticalSection(&map_cs);
 		InitializeCriticalSection(&deleteCS);
 	}
+
 	// deny copy
 	Room(const Room&) = delete;
 	Room& operator=(const Room&) = delete;
@@ -153,110 +148,16 @@ public:
 		DeleteCriticalSection(&deleteCS);
 	}
 
-	bool input_socketinfo(SOCKETINFO* client_info)
-	{
-		if (countClient.load() == maxClientsNum) return false;
+	bool input_socketinfo(SOCKETINFO* client_info);
 
-		EnterCriticalSection(&map_cs);
-		int id = next_id.fetch_add(1); // 안전하게 id 할당
-		client_info->id = id;
+	bool find_socketinfo(int id, SOCKETINFO*& found);
 
-		auto pair = client_map.emplace(id, client_info);
-		if (!pair.second) {
-			LeaveCriticalSection(&map_cs);
-			return false;
-		}
+	bool socketinfo_isin_here(int id);
+	bool delete_socketinfo(int id);
 
-		countClient.fetch_add(1);
-		LeaveCriticalSection(&map_cs);
-		return true;
-	}
+	void destroyInvalidSOCKETINFO();
 
-	bool find_socketinfo(int id, SOCKETINFO*& found)
-	{
-		bool result = false;
-		EnterCriticalSection(&map_cs);
-
-		auto it = client_map.find(id);
-		if (it != client_map.end())
-		{
-			found = it->second;
-			result = true;
-		}
-
-		LeaveCriticalSection(&map_cs);
-		return result;
-	}
-
-	bool socketinfo_isin_here(int id)
-	{
-		bool result = false;
-		EnterCriticalSection(&map_cs);
-
-		auto it = client_map.find(id);
-
-		if (it != client_map.end())	result = true;
-		
-		LeaveCriticalSection(&map_cs);
-
-		return result;
-	}
-
-	bool delete_socketinfo(int id)
-	{
-		EnterCriticalSection(&map_cs);
-		EnterCriticalSection(&deleteCS);
-
-		bool result = false;
-
-		auto it = client_map.find(id);
-		if (it != client_map.end())
-		{
-			countClient.fetch_sub(1);
-			deletedClients.push_back(it->second);
-			result = true;
-		}
-
-		LeaveCriticalSection(&deleteCS);
-		LeaveCriticalSection(&map_cs);
-		return result;
-	}
-
-	void destroyInvalidSOCKETINFO()
-	{
-		EnterCriticalSection(&map_cs);
-		EnterCriticalSection(&deleteCS);
-
-		for (auto it = deletedClients.begin(); it != deletedClients.end(); )
-		{
-			SOCKETINFO* info = *it;
-
-			if (info->responseCount.load() == 0)
-			{
-				client_map.erase(info->id);
-				info->cleanupSession();
-				delete info;
-				it = deletedClients.erase(it);
-			}
-			else
-			{
-				++it;
-			}
-		}
-		LeaveCriticalSection(&deleteCS);
-		LeaveCriticalSection(&map_cs);
-	}
-
-	void delete_all()
-	{
-		EnterCriticalSection(&map_cs);
-		for (auto it = client_map.begin(); it != client_map.end(); )
-		{
-			delete it->second;
-			it = client_map.erase(it);
-		}
-		LeaveCriticalSection(&map_cs);
-	}
+	void delete_all();
 
 	size_t getDeleteNum() const { return deletedClients.size(); }
 	int getClientCount() const { return countClient; }
@@ -264,21 +165,13 @@ public:
 	void EnterCriticalOutSide() { EnterCriticalSection(&map_cs); }
 	void LeaveCriticalOutSide() { LeaveCriticalSection(&map_cs); }
 
-	void CopyMemberPointers(std::vector<SOCKETINFO*>& out)
-	{
-		EnterCriticalSection(&map_cs);
-		out.reserve(client_map.size());
-		for (auto& pair : client_map)
-			out.push_back(pair.second);  // 포인터 얕은 복사
-		LeaveCriticalSection(&map_cs);
-	}
+	void CopyMemberPointers(std::vector<SOCKETINFO*>& out);
 };
 
 class IOCPSessionManager : public Room
 {
 	static IOCPSessionManager* instance;
-
-	IOCPSessionManager(): Room()
+	IOCPSessionManager(): Room(0)
 	{ }
 public:
 	static IOCPSessionManager& getInstance()

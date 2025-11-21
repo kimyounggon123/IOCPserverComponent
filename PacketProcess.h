@@ -47,6 +47,7 @@ public:
 
 	virtual void initialize();
 	virtual bool registerThreadLocal() { return true; }
+	virtual bool closeThreadLocal() { return true; }
 	HandlerFunc getFunc(TaskQueueInput* input);
 
 	bool getInitialized() noexcept { return isInitialized; }

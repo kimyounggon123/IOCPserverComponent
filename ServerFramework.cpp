@@ -9,11 +9,13 @@ bool ServerFramework::initialize()
 		if (packetProc == nullptr) throw "PacketProcess is nullptr!"; // process는 미리 받아오기
 
 		packetThreadPool = new PacketProcessThreadPool(10, packetProc);
-		iocp = new IOCPserver(serverPort, packetThreadPool);
-		sendManager = new SendManager(10);
 
+		iocp = new IOCPserver(portTCP, portUDP, packetThreadPool);
 		if (iocp && !iocp->initialize()) throw "IOCP";
+
+		sendManager = new SendManager(10, iocp->GetUDPSocket());
 		if (sendManager && !sendManager->initialize())  throw "SendManager";
+
 		if (packetThreadPool && !packetThreadPool->initialize()) throw "PacketThreadPool";
 		if (!dispatcher.initialize()) throw "Dispatcher";
 	}

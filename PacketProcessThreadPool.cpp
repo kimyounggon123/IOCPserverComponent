@@ -14,7 +14,7 @@ bool PacketProcessThreadPool::initialize()
 unsigned int PacketProcessThreadPool::workLoop() // in while loop
 {
 	DWORD result = 0;
-	result = packetProcess->registerThreadLocal();
+	packetProcess->registerThreadLocal();
 
 	while (!exit_flag.load())
 	{
@@ -54,5 +54,7 @@ unsigned int PacketProcessThreadPool::workLoop() // in while loop
 			logs.log_error(msg, "PacketProcessThreadPool::work()");
 		}
 	}
+
+	packetProcess->closeThreadLocal();
 	return 1;
 }

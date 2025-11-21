@@ -135,7 +135,6 @@
     <ClCompile Include="SOCKETINFO.cpp" />
     <ClCompile Include="ThreadPool.cpp" />
     <ClCompile Include="ThreadSafeQueue.cpp" />
-    <ClCompile Include="UDPserver.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Dispatcher.h" />
@@ -151,7 +150,6 @@
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="ThreadPool.h" />
     <ClInclude Include="ThreadSafeQueue.h" />
-    <ClInclude Include="UDPserver.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

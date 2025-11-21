@@ -26,15 +26,15 @@ class ServerFramework
 	bool exit_flag;
 	WSADATA wsadata;
 	
+protected:
+
 	PacketProcess* packetProc; // PacketProcess 부분만 상속 받아서 확장시키기
 	PacketProcessThreadPool* packetThreadPool;
 
-	IOCPserver* iocp; USHORT serverPort;
+	IOCPserver* iocp; USHORT portTCP; USHORT portUDP; // port = 0 -> invalid socket
 	SendManager* sendManager;
 	Dispatcher& dispatcher;
 	IOCPSessionManager& sessionManager;
-
-protected:
 
 	Logs& logs;
 	InputManager& input;
@@ -47,9 +47,10 @@ protected:
 
 public:
 
-	ServerFramework(PacketProcess* packetProc = nullptr, USHORT serverPort = 1000): exit_flag(false),
+	ServerFramework(PacketProcess* packetProc = nullptr, USHORT portTCP = 0, USHORT portUDP = 0):
+		exit_flag(false),
 		packetProc(packetProc), packetThreadPool(nullptr), iocp(nullptr), sendManager(nullptr),
-		serverPort(serverPort), dispatcher(Dispatcher::getInstance()), sessionManager(IOCPSessionManager::getInstance()),
+		portTCP(portTCP), portUDP(portUDP), dispatcher(Dispatcher::getInstance()), sessionManager(IOCPSessionManager::getInstance()),
 		logs(Logs::getInstance()), input(InputManager::getInstance())
 	{
 		if (WSAStartup(MAKEWORD(2, 2), &wsadata) != 0) return;
