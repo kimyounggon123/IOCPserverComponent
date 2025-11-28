@@ -33,13 +33,13 @@ unsigned int PacketProcessThreadPool::workLoop() // in while loop
 			// 결과에 따라 다른 큐에 input
 			PacketResult pkResult = output->packet->get_process_result();
 
-			if (pkResult == PacketResult::Success || pkResult == PacketResult::Fail)
+			if (pkResult == Success || pkResult == Fail)
 			{
 				if (!dispatcher.enqueue(output, QueueInformation::Send)) throw "enqueueForSendProcess()";
 			}
 			else
 			{
-				output->packet->set_process_result(PacketResult::Fail);
+				output->packet->set_process_result(Fail);
 				dispatcher.enqueue(output, QueueInformation::Send);
 				throw "wrong packet result!!";
 			}
@@ -48,7 +48,7 @@ unsigned int PacketProcessThreadPool::workLoop() // in while loop
 		{
 			if (output && !output->isInvalid())
 			{
-				output->packet->set_process_result(PacketResult::Fail);
+				output->packet->set_process_result(Fail);
 				dispatcher.enqueue(output, QueueInformation::Send);
 			}
 			logs.log_error(msg, "PacketProcessThreadPool::work()");

@@ -3,7 +3,7 @@ const unsigned int Packet::end_mark = 0xffffffff;
 void Packet::CLEAR_PACKET(bool delete_pk) {
 	memset(data, 0, BUFFERSIZE + 1);
 	header.length = 0;
-	if (delete_pk) set_header_type(PacketType::Default);
+	if (delete_pk) set_header_type(Default);
 }
 bool Packet::is_ascii(const std::string& str) {
 	for (char c : str) {
@@ -203,8 +203,8 @@ ERROR_CODE Packet::readString(std::string& dest, size_t& offset) {
 void Packet::inputHeader(char* buffer, size_t& offset)
 {
 	int32_t endianClientID = htonl(header.clientID);
-	int32_t endianType = htonl(static_cast<int32_t>(header.type));
-	int32_t endianResult = htonl(static_cast<int32_t>(header.result));
+	int32_t endianType = htonl(header.type);
+	int32_t endianResult = htonl(header.result);
 	int32_t endianLength = htonl(header.length);
 	
 	memcpy(buffer + offset, &endianClientID, sizeof(int32_t));
@@ -255,8 +255,8 @@ void Packet::copyHeader(const char* buffer, size_t& offset)
 	offset += sizeof(int32_t);
 
 	header.clientID = ntohl(netClientID);
-	header.type = static_cast<PacketType>(ntohl(netType));
-	header.result = static_cast<PacketResult>(ntohl(netResult));
+	header.type = ntohl(netType);
+	header.result = ntohl(netResult);
 	header.length = ntohl(netLength);
 }
 

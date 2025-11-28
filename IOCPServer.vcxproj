@@ -125,6 +125,7 @@
   <ItemGroup>
     <ClCompile Include="Dispatcher.cpp" />
     <ClCompile Include="InputManager.cpp" />
+    <ClCompile Include="PacketID.cpp" />
     <ClCompile Include="ServerFramework.cpp" />
     <ClCompile Include="DataToConnectWithClient.cpp" />
     <ClCompile Include="IOCPserver.cpp" />
@@ -139,6 +140,7 @@
   <ItemGroup>
     <ClInclude Include="Dispatcher.h" />
     <ClInclude Include="InputManager.h" />
+    <ClInclude Include="PacketID.h" />
     <ClInclude Include="ServerFramework.h" />
     <ClInclude Include="DataToConnectWithClient.h" />
     <ClInclude Include="PacketProcess.h" />

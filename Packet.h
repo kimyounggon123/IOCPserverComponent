@@ -5,8 +5,9 @@
 #include "stdafx.h"
 #include <cstdint>
 #include <cstring>
+#include "PacketID.h"
 
-// Headers
+/*
 enum class PacketType
 {
 	Default,
@@ -30,19 +31,19 @@ enum class PacketResult
 	Fail,
 	BroadCast
 };
-
+*/
 #pragma pack(push, 1)   // 1바이트 단위로 정렬 시작
 struct PacketHeader
 {
 	// Header informations
-	int clientID;
+	int32_t clientID;
 	PacketType type;
 	PacketResult result;
-	int length;
+	int32_t length;
 
-	PacketHeader() : clientID(0), type(PacketType::Default), result(PacketResult::Try), length(0)
+	PacketHeader() : clientID(0), type(PacketType::Default), result(Try), length(0)
 	{}
-	PacketHeader(int clientID, PacketType type, PacketResult result) : clientID(clientID), type(type), result(result), length(0)
+	PacketHeader(int32_t clientID, PacketType type, PacketResult result) : clientID(clientID), type(type), result(result), length(0)
 	{}
 
 	PacketHeader(const PacketHeader& other) :
