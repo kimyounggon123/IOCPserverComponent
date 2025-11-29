@@ -7,43 +7,18 @@
 #include <cstring>
 #include "PacketID.h"
 
-/*
-enum class PacketType
-{
-	Default,
-	ServerIsClosed,
-
-	SignUp,
-	LogIn,
-	LogOut,
-
-	Hello,
-	Move,
-	FireBullet,
-	Dead
-};
-
-enum class PacketResult
-{
-	Try,
-	WaitDatabase,
-	Success,
-	Fail,
-	BroadCast
-};
-*/
 #pragma pack(push, 1)   // 1바이트 단위로 정렬 시작
 struct PacketHeader
 {
 	// Header informations
 	int32_t clientID;
-	PacketType type;
-	PacketResult result;
+	int32_t type;
+	int32_t result;
 	int32_t length;
 
-	PacketHeader() : clientID(0), type(PacketType::Default), result(Try), length(0)
+	PacketHeader() : clientID(0), type(PacketType::Default), result(PacketResult::Try), length(0)
 	{}
-	PacketHeader(int32_t clientID, PacketType type, PacketResult result) : clientID(clientID), type(type), result(result), length(0)
+	PacketHeader(int32_t clientID, int32_t type, int32_t result) : clientID(clientID), type(type), result(result), length(0)
 	{}
 
 	PacketHeader(const PacketHeader& other) :
@@ -81,7 +56,7 @@ public:
 
 	Packet(): header{}, data{}
 	{}
-	Packet(int clientID, PacketType type, PacketResult result): header(clientID, type, result), data{}
+	Packet(int clientID, int32_t type, int32_t result): header(clientID, type, result), data{}
 	{}
 
 	Packet(const Packet& other) :
@@ -126,12 +101,12 @@ public:
 	ERROR_CODE deserialize(const char* buffer, int recvLength, size_t& offset);
 
 	/// <getter / setter>
-	void set_header_type(const PacketType& change) noexcept { header.type = change; }
-	const PacketType& get_type() noexcept { return header.type; }
-	bool is_header(const PacketType& compare) noexcept { return header.type == compare; }
+	void set_header_type(const int32_t& change) noexcept { header.type = change; }
+	const int32_t& get_type() noexcept { return header.type; }
+	bool is_header(const int32_t& compare) noexcept { return header.type == compare; }
 
-	void set_process_result(const PacketResult& change) noexcept { header.result = change; }
-	const PacketResult& get_process_result() noexcept { return header.result; }
+	void set_process_result(const int32_t& change) noexcept { header.result = change; }
+	const int32_t& get_process_result() noexcept { return header.result; }
 
 	void setClientID(int id) noexcept { header.clientID = id; }
 	int getClientID() noexcept { return header.clientID; }

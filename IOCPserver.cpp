@@ -394,7 +394,7 @@ bool IOCPserver::makePacketFromIOresult(SOCKETINFO* ptr, DWORD cbTransferred)
 				}
 				continue;
 			}
-			if (isGateClosed.load()) input->packet->set_header_type(ServerIsClosed);
+			if (isGateClosed.load()) input->packet->set_header_type(PacketType::ServerIsClosed);
 			if (!dispatcher.enqueue(input, QueueInformation::PacketProcess)) throw "enqueue()";
 
 			offset = localOffset;
@@ -574,7 +574,7 @@ bool IOCPserver::MakePacketUDP(SOCKETINFO* ptr, DWORD cbTransferred)
 				return logs.log_error("deserialize failed", "MakePacketUDP()");
 			}
 			
-			if (isGateClosed.load()) input->packet->set_header_type(ServerIsClosed);
+			if (isGateClosed.load()) input->packet->set_header_type(PacketType::ServerIsClosed);
 			if (!dispatcher.enqueue(input, QueueInformation::PacketProcess)) throw "enqueue()";
 
 			offset = localOffset;

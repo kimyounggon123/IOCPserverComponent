@@ -4,11 +4,11 @@ std::unordered_map<PacketProcessKey, HandlerFunc, PacketProcessKeyHash> PacketPr
 void PacketProcess::initialize()
 {
 	func_map.emplace(
-		PacketProcessKey{ Default, Try },
+		PacketProcessKey{ PacketType::Default, PacketResult::Try},
 		[this](TaskQueueInput* input) {return testPacketFunc(input); }
 	);
 	func_map.emplace(
-		PacketProcessKey{ ServerIsClosed, Try },
+		PacketProcessKey{ PacketType::ServerIsClosed, PacketResult::Try },
 		[this](TaskQueueInput* input) {return closedServerLogic(input); }
 	);
 }
@@ -49,7 +49,7 @@ bool PacketProcess::testPacketFunc(TaskQueueInput* input)
 	for (int i = 0; i < 10000; ++i) // 
 		result += sqrt(i * 1.23);
 
-	input->packet->set_process_result(Success);
+	input->packet->set_process_result(PacketResult::Success);
 	return true;
 }
 
@@ -57,7 +57,7 @@ bool PacketProcess::closedServerLogic(TaskQueueInput* input)
 {
 	if (input == nullptr) return logs.log_error("got nullptr");
 	logs.log("Server is closed.");
-	input->packet->set_process_result(Fail);
+	input->packet->set_process_result(PacketResult::Fail);
 	return true;
 }
 
@@ -69,7 +69,7 @@ HandlerFunc PacketProcess::getFunc(TaskQueueInput* input)
 
 	return [this](TaskQueueInput* input)
 		{
-			input->packet->set_process_result(Fail);
+			input->packet->set_process_result(PacketResult::Fail);
 			return logs.log_error("type error", "Packet process");
 		};
 }

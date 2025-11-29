@@ -2,24 +2,24 @@
 #define _PACKETID_H
 #include <cstdint>
 
-// Headers
-class PacketType
-{
-public:
-	using Type = int32_t;
-	static constexpr Type Default = 0;
-	static constexpr Type ServerIsClosed = 1;
 
-};
-class PacketResult
+// Headers
+struct PacketType
 {
-public:
-	using Type = int32_t;
-	static constexpr Type Try = 0;
-	static constexpr Type WaitDatabase = 1;
-	static constexpr Type Success = 2;
-	static constexpr Type Fail = 3;
-	static constexpr Type BroadCast = 4;
+	static constexpr int32_t Base = 0;
+	static constexpr int32_t Default = Base + 0;
+	static constexpr int32_t ServerIsClosed = Base + 1;
 };
+
+struct PacketResult
+{
+	static constexpr int32_t Base = 0;
+	static constexpr int32_t Try = Base + 1;
+	static constexpr int32_t WaitDatabase = Base + 2;
+	static constexpr int32_t Success = Base + 3;
+	static constexpr int32_t Fail = Base + 4;
+	static constexpr int32_t BroadCast = Base + 5;
+};
+
 
 #endif

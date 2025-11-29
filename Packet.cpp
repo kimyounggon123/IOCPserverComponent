@@ -3,7 +3,7 @@ const unsigned int Packet::end_mark = 0xffffffff;
 void Packet::CLEAR_PACKET(bool delete_pk) {
 	memset(data, 0, BUFFERSIZE + 1);
 	header.length = 0;
-	if (delete_pk) set_header_type(Default);
+	if (delete_pk) set_header_type(PacketType::Default);
 }
 bool Packet::is_ascii(const std::string& str) {
 	for (char c : str) {

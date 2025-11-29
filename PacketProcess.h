@@ -10,8 +10,8 @@
 
 // ÇØ½Ì¿ë
 struct PacketProcessKey {
-	PacketType type;
-	PacketResult result;
+	int32_t type;
+	int32_t result;
 
 	bool operator==(const PacketProcessKey& other) const {
 		return type == other.type && result == other.result;
