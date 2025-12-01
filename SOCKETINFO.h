@@ -14,15 +14,17 @@
 #include "Logs.h"
 #include "Packet.h"
 
+#define IO_BUFFER_LEN 5 * BUFFERSIZE
 // session control class
 enum class IO_TYPE { Request, Response };
+
 struct SOCKETINFO;
 struct IO_CONTEXT {
 	OVERLAPPED overlapped; // 반드시 첫 멤버로 설정해야 함
 	IO_TYPE ioType;
 
 	WSABUF wsabuf;
-	char IO_buffer[2 * BUFFERSIZE];
+	char IO_buffer[IO_BUFFER_LEN];
 
 	SOCKETINFO* owner;
 
@@ -30,16 +32,18 @@ struct IO_CONTEXT {
 	IO_CONTEXT() : ioType(IO_TYPE::Request), owner(nullptr), IO_buffer{}
 	{
 		memset(&overlapped, 0, sizeof(OVERLAPPED));
+		memset(&IO_buffer, 0, IO_BUFFER_LEN);
 		wsabuf.buf = IO_buffer;
-		wsabuf.len = 2 * BUFFERSIZE;
+		wsabuf.len = IO_BUFFER_LEN;
 	}
 
 	IO_CONTEXT(IO_TYPE type, SOCKETINFO* owner) : ioType(type), owner(owner),
 		IO_buffer{}
 	{
 		memset(&overlapped, 0, sizeof(OVERLAPPED));
+		memset(&IO_buffer, 0, IO_BUFFER_LEN);
 		wsabuf.buf = IO_buffer;
-		wsabuf.len = 2 * BUFFERSIZE;
+		wsabuf.len = IO_BUFFER_LEN;
 	}
 
 	~IO_CONTEXT()
@@ -47,11 +51,12 @@ struct IO_CONTEXT {
 		owner = nullptr;
 	}
 
-	void reset_overlapped(char* buf = nullptr, ULONG len = 2 * BUFFERSIZE)
+	void reset_overlapped(char* buf = nullptr, bool ClearIO_buffer = false)
 	{
 		memset(&overlapped, 0, sizeof(OVERLAPPED));
+		if (ClearIO_buffer) memset(&IO_buffer, 0, IO_BUFFER_LEN);
 		wsabuf.buf = IO_buffer;
-		wsabuf.len = len;
+		wsabuf.len = IO_BUFFER_LEN;
 	}
 };
 

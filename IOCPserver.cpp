@@ -115,12 +115,12 @@ bool IOCPserver::Start()
 		{
 			if (!makeClientSocket())
 			{
-				throw "TCP socket initialzie fail";
+				throw "TCP socket initialize fail";
 			}
-			if (!MakeSocketInfoToRecvFrom())
-			{
-				throw "UDP socket initialzie fail";
-			}
+		}
+		if (!MakeSocketInfoToRecvFrom())
+		{
+			throw "UDP socket initialize fail";
 		}
 	}
 	catch (const char* msg)
@@ -181,8 +181,11 @@ unsigned int WINAPI IOCPserver::workerThread(LPVOID server_info)
 
 		IO_CONTEXT* io = reinterpret_cast<IO_CONTEXT*>(overlapped);
 		socketinfo = io->owner; // IO_CONTEXT에서 역추적
+
 		if (socketinfo == nullptr)	continue;
-		
+		std::string type = socketinfo->sessionType == SESSION_TYPE::TCP ? "TCP" : "UDP";
+		std::string ioType = io->ioType == IO_TYPE::Request ? "Request" : "Response";
+		printf("io: %p (type: %s) (io type: %s)\n", io, type.c_str(), ioType.c_str());
 		if (socketinfo->sessionType == SESSION_TYPE::TCP)
 			This->TCPLogic(socketinfo, io, retval, cbTransferred);
 		if (socketinfo->sessionType == SESSION_TYPE::UDP)
@@ -442,7 +445,6 @@ bool IOCPserver::UDPLogic(SOCKETINFO* socketinfo, IO_CONTEXT* io, INT retval, DW
 		}
 
 
-
 		// cbTransferred > 0 일 경우
 		if (io->ioType == IO_TYPE::Request)
 		{
@@ -453,7 +455,8 @@ bool IOCPserver::UDPLogic(SOCKETINFO* socketinfo, IO_CONTEXT* io, INT retval, DW
 					sessionManager.delete_socketinfo(socketinfo->id);
 					throw "welcomeClient() failed";
 				}
-				if (sessionManager.getClientCount() % 50 == 0)printf("count: %d\n", sessionManager.getClientCount());
+				if (sessionManager.getClientCount() % 50 == 0) 
+					printf("count: %d\n", sessionManager.getClientCount());
 			}
 
 			MakePacketUDP(socketinfo, cbTransferred);
@@ -469,6 +472,7 @@ bool IOCPserver::UDPLogic(SOCKETINFO* socketinfo, IO_CONTEXT* io, INT retval, DW
 	}
 	return true;
 }
+
 bool IOCPserver::MakeSocketInfoToRecvFrom()
 {
 	// get data from clients
@@ -482,6 +486,8 @@ bool IOCPserver::MakeSocketInfoToRecvFrom()
 		ptr = new SOCKETINFO(SESSION_TYPE::UDP);
 		if (!ptr) throw "memory limit";
 
+		ptr->request.reset_overlapped(ptr->request.IO_buffer, true);
+		//printf("qweqwweq\n");
 		retval = WSARecvFrom(
 			sockUDP,                  // 서버 소켓
 			&ptr->request.wsabuf,
@@ -513,7 +519,7 @@ bool IOCPserver::MakeSocketInfoToRecvFrom()
 bool IOCPserver::RecvUDP(SOCKETINFO* ptr)
 {
 	// get data from clients
-	ptr->request.reset_overlapped(ptr->request.IO_buffer);
+	ptr->request.reset_overlapped(ptr->request.IO_buffer, true);
 
 	INT retval;
 	DWORD recvbytes;
@@ -542,10 +548,10 @@ bool IOCPserver::RecvUDP(SOCKETINFO* ptr)
 bool IOCPserver::WelcomeToUDP(SOCKETINFO* ptr)
 {
 	if (!ptr) return false;
-	ptr->acceptCompleted.store(true);
-	MakeSocketInfoToRecvFrom();
-	return true;
+	printf("welcome!\n");
+	return	true;
 }
+
 bool IOCPserver::MakePacketUDP(SOCKETINFO* ptr, DWORD cbTransferred)
 {
 
@@ -557,7 +563,6 @@ bool IOCPserver::MakePacketUDP(SOCKETINFO* ptr, DWORD cbTransferred)
 
 	const int MAX_RESYNC = 5;
 	int resyncCount = 0;
-
 	try
 	{
 		while (cbTransferred > offset) // 패킷 무결성 검증
@@ -566,8 +571,7 @@ bool IOCPserver::MakePacketUDP(SOCKETINFO* ptr, DWORD cbTransferred)
 			if (input == nullptr) throw "input is nullptr!";
 			input->sessionInfo = ptr;
 
-			size_t localOffset = offset;
-			ERROR_CODE err = input->packet->deserialize(ptr->request.IO_buffer, cbTransferred - localOffset, localOffset);
+			ERROR_CODE err = input->packet->deserialize(ptr->request.IO_buffer, cbTransferred - offset, offset);
 			if (err != ERROR_CODE::SUCCESS)
 			{
 				dispatcher.push(input);
@@ -576,8 +580,6 @@ bool IOCPserver::MakePacketUDP(SOCKETINFO* ptr, DWORD cbTransferred)
 			
 			if (isGateClosed.load()) input->packet->set_header_type(PacketType::ServerIsClosed);
 			if (!dispatcher.enqueue(input, QueueInformation::PacketProcess)) throw "enqueue()";
-
-			offset = localOffset;
 		}
 	}
 
@@ -595,10 +597,6 @@ bool IOCPserver::MakePacketUDP(SOCKETINFO* ptr, DWORD cbTransferred)
 
 	return result;
 }
-
-
-
-
 
 //////////////////////// SendManager ///////////////////////////////
 bool SendManager::initialize()

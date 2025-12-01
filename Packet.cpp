@@ -282,9 +282,9 @@ ERROR_CODE Packet::deserialize(const char* buffer, int recvLength, size_t& offse
 
 	if (received_end_mark != end_mark)
 	{
-		//printf("received_end_mark: 0x%08X\n", received_end_mark); // hex 출력
-		//printf("header type: %d\n", header.type);
-		//printf("header length: %d\n", header.length);
+		printf("received_end_mark: 0x%08X\n", received_end_mark); // hex 출력
+		printf("header type: %d\n", header.type);
+		printf("header length: %d\n", header.length);
 		return ERROR_CODE::OPENED_PACKET;
 	}
 	localOffset += sizeof(end_mark);
