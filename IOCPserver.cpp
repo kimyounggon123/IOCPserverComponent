@@ -117,10 +117,10 @@ bool IOCPserver::Start()
 			{
 				throw "TCP socket initialize fail";
 			}
-		}
-		if (!MakeSocketInfoToRecvFrom())
-		{
-			throw "UDP socket initialize fail";
+			if (!MakeSocketInfoToRecvFrom())
+			{
+				throw "UDP socket initialize fail";
+			}
 		}
 	}
 	catch (const char* msg)
@@ -429,35 +429,38 @@ bool IOCPserver::UDPLogic(SOCKETINFO* socketinfo, IO_CONTEXT* io, INT retval, DW
 	try
 	{
 		if (socketinfo == nullptr || io == nullptr)	throw "nullptr";
+
+		//UDPsession* info = nullptr;
+		//printf("id: %d\n", socketinfo->id);
+		//if (sessionManager.findUDPsession(socketinfo->id, info)) throw "undefined!";
+
 		if (io->ioType == IO_TYPE::Response)
 		{
-			socketinfo->subResponseCount();
+			if (socketinfo->isBroadcast) sessionManager.InputSOCKETINFOforUDP(socketinfo);
+			//socketinfo->subResponseCount();
 			socketinfo->setSendEvent();
 		}
 
 		// 서버/클라이언트 강제 종료 시
-		if (retval == 0 || cbTransferred == 0)
+		/*if (retval == 0 || cbTransferred == 0)
 		{
 			int err = WSAGetLastError();
 			sessionManager.delete_socketinfo(socketinfo->id);
 			logs.log("Quit server");
 			return true;
-		}
-
+		}*/
 
 		// cbTransferred > 0 일 경우
 		if (io->ioType == IO_TYPE::Request)
 		{
-			if (!socketinfo->acceptCompleted.load())
+			/*if (!socketinfo->acceptCompleted.load())
 			{
-				if (!WelcomeToUDP(socketinfo))
+				if (!WelcomeToUDP(socketinfo, info))
 				{
 					sessionManager.delete_socketinfo(socketinfo->id);
 					throw "welcomeClient() failed";
 				}
-				if (sessionManager.getClientCount() % 50 == 0) 
-					printf("count: %d\n", sessionManager.getClientCount());
-			}
+			}*/
 
 			MakePacketUDP(socketinfo, cbTransferred);
 			if (!RecvUDP(socketinfo)) throw "request()";
@@ -487,8 +490,9 @@ bool IOCPserver::MakeSocketInfoToRecvFrom()
 		if (!ptr) throw "memory limit";
 
 		ptr->request.reset_overlapped(ptr->request.IO_buffer, true);
-		//printf("qweqwweq\n");
-		retval = WSARecvFrom(
+
+		retval = WSARecvFrom
+		(
 			sockUDP,                  // 서버 소켓
 			&ptr->request.wsabuf,
 			1,
@@ -505,7 +509,7 @@ bool IOCPserver::MakeSocketInfoToRecvFrom()
 			}
 		}
 
-		sessionManager.input_socketinfo(ptr); // map에 저장
+		sessionManager.InputSOCKETINFOforUDP(ptr); // map에 저장
 	}
 	catch (const char* msg)
 	{
@@ -545,16 +549,17 @@ bool IOCPserver::RecvUDP(SOCKETINFO* ptr)
 
 	return true;
 }
+
 bool IOCPserver::WelcomeToUDP(SOCKETINFO* ptr)
 {
 	if (!ptr) return false;
+	sessionManager.inputUDPsession(ptr->addr);
 	printf("welcome!\n");
 	return	true;
 }
 
 bool IOCPserver::MakePacketUDP(SOCKETINFO* ptr, DWORD cbTransferred)
 {
-
 	if (!ptr) return false;
 
 	bool result = true;
@@ -563,14 +568,15 @@ bool IOCPserver::MakePacketUDP(SOCKETINFO* ptr, DWORD cbTransferred)
 
 	const int MAX_RESYNC = 5;
 	int resyncCount = 0;
+	
 	try
 	{
 		while (cbTransferred > offset) // 패킷 무결성 검증
 		{
 			if (!dispatcher.pop(input)) throw "memory limit";
 			if (input == nullptr) throw "input is nullptr!";
-			input->sessionInfo = ptr;
-
+			input->InputInfo(ptr,  ptr->addr);
+			
 			ERROR_CODE err = input->packet->deserialize(ptr->request.IO_buffer, cbTransferred - offset, offset);
 			if (err != ERROR_CODE::SUCCESS)
 			{
@@ -612,7 +618,6 @@ unsigned int SendManager::workLoop()
 
 	while (!exit_flag.load())
 	{
-		SOCKETINFO* ptr = nullptr;
 		TaskQueueInput* output = nullptr;
 
 		try
@@ -661,11 +666,12 @@ unsigned int SendManager::workLoop()
 					1,
 					&sendbytes,
 					0,
-					(SOCKADDR*)&output->sessionInfo->addr,
+					(SOCKADDR*)&output->udpInfo,
 					sizeof(SOCKADDR_IN),
 					&output->sessionInfo->response.overlapped,
 					NULL);
-				if (retval == SOCKET_ERROR) {
+				if (retval == SOCKET_ERROR) 
+				{
 					if (WSAGetLastError() != WSA_IO_PENDING)
 					{
 						throw "WSASend()";

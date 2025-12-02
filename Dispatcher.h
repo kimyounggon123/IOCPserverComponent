@@ -10,18 +10,26 @@
 struct TaskQueueInput
 {
 	SOCKETINFO* sessionInfo;
+	SOCKADDR_IN udpInfo;
 	Packet* packet;
 
 public:
-	TaskQueueInput(SOCKETINFO* sessionInfo = nullptr) : sessionInfo(sessionInfo), packet(new Packet())
+	TaskQueueInput(SOCKETINFO* sessionInfo = nullptr, const SOCKADDR_IN& udpInfo = SOCKADDR_IN{}) :
+		sessionInfo(sessionInfo), udpInfo(udpInfo), packet(new Packet())
 	{}
 	TaskQueueInput& operator=(const TaskQueueInput& other)
 	{
 		if (this != &other) {
 			sessionInfo = other.sessionInfo; // session 정보는 deep copy하지 말도록.
+			udpInfo = other.udpInfo;
 			*packet = *other.packet;
 		}
 		return *this;
+	}
+	void InputInfo(SOCKETINFO* sockinfo, const SOCKADDR_IN& udpinfo)
+	{
+		sessionInfo = sockinfo;
+		udpInfo = udpinfo;
 	}
 	bool isInvalid() { return sessionInfo == nullptr || packet == nullptr; }
 

@@ -1,7 +1,7 @@
 #include "SOCKETINFO.h"
 
 
-bool Room::input_socketinfo(SOCKETINFO * client_info)
+bool Room::input_socketinfo(SOCKETINFO* client_info)
 {
 	if (countClient.load() == maxClientsNum) return false;
 
@@ -10,7 +10,8 @@ bool Room::input_socketinfo(SOCKETINFO * client_info)
 	client_info->id = id;
 
 	auto pair = client_map.emplace(id, client_info);
-	if (!pair.second) {
+	if (!pair.second)
+	{
 		LeaveCriticalSection(&map_cs);
 		return false;
 	}
@@ -82,6 +83,7 @@ void Room::destroyInvalidSOCKETINFO()
 		if (info->responseCount.load() == 0)
 		{
 			client_map.erase(info->id);
+			deleteUDPsession(info->addr);
 			info->cleanupSession();
 			delete info;
 			it = deletedClients.erase(it);
@@ -104,9 +106,16 @@ void Room::delete_all()
 		it = client_map.erase(it);
 	}
 	LeaveCriticalSection(&map_cs);
+
+	EnterCriticalSection(&udpCS);
+	for (auto it = udpTargets.begin(); it != udpTargets.end();)
+	{
+		it = udpTargets.erase(it);
+	}
+	LeaveCriticalSection(&udpCS);
 }
 
-void Room::CopyMemberPointers(std::vector<SOCKETINFO*>& out)
+void Room::CopySOCKETINFOPointers(std::vector<SOCKETINFO*>& out)
 {
 	EnterCriticalSection(&map_cs);
 	out.reserve(client_map.size());
@@ -114,5 +123,41 @@ void Room::CopyMemberPointers(std::vector<SOCKETINFO*>& out)
 		out.push_back(pair.second);  // 포인터 얕은 복사
 	LeaveCriticalSection(&map_cs);
 }
+
+bool Room::inputUDPsession(const SOCKADDR_IN& addr)
+{
+	EnterCriticalSection(&udpCS);
+	udpTargets.push_back(addr);
+	LeaveCriticalSection(&udpCS);
+	return true;
+}
+
+bool Room::deleteUDPsession(const SOCKADDR_IN& addr)
+{
+	EnterCriticalSection(&udpCS);
+
+	auto it = std::find_if(
+		udpTargets.begin(), udpTargets.end(),
+		[&](const SOCKADDR_IN& a) {
+			return a.sin_addr.s_addr == addr.sin_addr.s_addr &&
+				a.sin_port == addr.sin_port &&
+				a.sin_family == addr.sin_family;
+		}
+	);
+
+	if (it != udpTargets.end())
+		udpTargets.erase(it);
+
+	LeaveCriticalSection(&udpCS);
+	return true;
+}
+
+void Room::CopyMemberPointersUDP(std::vector<SOCKADDR_IN>& out)
+{
+	EnterCriticalSection(&udpCS);
+	out = udpTargets;  // 통째로 복사
+	LeaveCriticalSection(&udpCS);
+}
+
 
 IOCPSessionManager* IOCPSessionManager::instance = nullptr;

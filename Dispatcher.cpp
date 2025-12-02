@@ -32,7 +32,7 @@ void Dispatcher::undoAllQueue()
 bool Dispatcher::push(TaskQueueInput*& input)
 {
 	if (input == nullptr) return false;
-	input->sessionInfo = nullptr;
+	input->InputInfo(nullptr, {});
 	return taskPool.push(input);
 }
 bool Dispatcher::pop(TaskQueueInput*& output)

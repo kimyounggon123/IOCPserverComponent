@@ -77,14 +77,17 @@ struct SOCKETINFO {
 	IO_CONTEXT request;
 	IO_CONTEXT response;
 
-	SOCKETINFO(SESSION_TYPE sessionType)
+	const bool isBroadcast;  // 브로드캐스트용이면 true
+
+	SOCKETINFO(SESSION_TYPE sessionType, bool isBroadcast = false)
 		: id(0),
 		lastActive(GetTickCount64()),
 		sessionType(sessionType),
 		acceptCompleted(false),
 		responseCount(0),
 		sock(INVALID_SOCKET),
-		addr{}
+		addr{},
+		isBroadcast(isBroadcast)
 	{
 		hEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
 		if (hEvent != NULL) SetEvent(hEvent);
@@ -130,6 +133,9 @@ class Room
 	std::unordered_map<int, SOCKETINFO*> client_map; // 현재 접속한 클라이언트 목록들
 	CRITICAL_SECTION map_cs;
 
+	std::vector<SOCKADDR_IN> udpTargets; // 브로드캐스팅용
+	CRITICAL_SECTION udpCS;
+
 	std::vector<SOCKETINFO*>deletedClients;
 	CRITICAL_SECTION deleteCS;
 
@@ -138,6 +144,7 @@ public:
 		next_id(0), countClient(0), maxClientsNum(maxClientsNum)
 	{
 		InitializeCriticalSection(&map_cs);
+		InitializeCriticalSection(&udpCS);
 		InitializeCriticalSection(&deleteCS);
 	}
 
@@ -150,39 +157,66 @@ public:
 		delete_all();
 		destroyInvalidSOCKETINFO();
 		DeleteCriticalSection(&map_cs);
+		DeleteCriticalSection(&udpCS);
 		DeleteCriticalSection(&deleteCS);
 	}
 
+	// TCP
 	bool input_socketinfo(SOCKETINFO* client_info);
-
 	bool find_socketinfo(int id, SOCKETINFO*& found);
-
 	bool socketinfo_isin_here(int id);
 	bool delete_socketinfo(int id);
 
 	void destroyInvalidSOCKETINFO();
 
-	void delete_all();
-
 	size_t getDeleteNum() const { return deletedClients.size(); }
 	int getClientCount() const { return countClient; }
 
-	void EnterCriticalOutSide() { EnterCriticalSection(&map_cs); }
-	void LeaveCriticalOutSide() { LeaveCriticalSection(&map_cs); }
+	void CopySOCKETINFOPointers(std::vector<SOCKETINFO*>& out);
 
-	void CopyMemberPointers(std::vector<SOCKETINFO*>& out);
+
+
+	// UDP
+	bool inputUDPsession(const SOCKADDR_IN& addr);
+	bool deleteUDPsession(const SOCKADDR_IN& addr);
+	void CopyMemberPointersUDP(std::vector<SOCKADDR_IN>& out);
+
+
+	void delete_all();
+
 };
 
 class IOCPSessionManager : public Room
 {
 	static IOCPSessionManager* instance;
-	IOCPSessionManager(): Room(0)
-	{ }
+	ThreadSafeQueue<SOCKETINFO*> SOCKETINFOforUDPpool; // RecvFrom overlapped 전용
+	IOCPSessionManager(): Room(0), SOCKETINFOforUDPpool(true)
+	{}
+
 public:
 	static IOCPSessionManager& getInstance()
 	{
 		if (instance == nullptr) instance = new IOCPSessionManager;
 		return *instance;
+	}
+
+	bool InputSOCKETINFOforUDP(SOCKETINFO*& input)
+	{
+		return SOCKETINFOforUDPpool.enqueue(input);
+	}
+	bool PopSOCKETINFOforUDP(SOCKETINFO*& output)
+	{
+		return SOCKETINFOforUDPpool.dequeue(output);
+	}
+
+	void deleteUDPSOCKET()
+	{
+		while (!SOCKETINFOforUDPpool.isEmpty())
+		{
+			SOCKETINFO* delThis = nullptr;
+			if (SOCKETINFOforUDPpool.dequeue(delThis))
+				SAFE_FREE(delThis);
+		}
 	}
 };
 
