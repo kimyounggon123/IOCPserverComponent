@@ -265,14 +265,21 @@ ERROR_CODE Packet::deserialize(const char* buffer, int recvLength, size_t& offse
 	if (!buffer) return ERROR_CODE::GET_NULLPTR;
 	size_t localOffset = offset; // local บนป็
 
-	if (localOffset + sizeof(PacketHeader) > recvLength) return ERROR_CODE::NEED_EXTRA_DATA;
+	if (localOffset + sizeof(PacketHeader) > recvLength)
+	{
+		printf("1 localOffset: %d(recvLength: %d)\n", localOffset, recvLength);
+		return ERROR_CODE::NEED_EXTRA_DATA;
+	}
 
 	copyHeader(buffer, localOffset);
 
 	if (header.length < 0) return ERROR_CODE::INCORRECT_SIZE;
 
 	if (localOffset + header.length + sizeof(end_mark) > recvLength)
+	{
+		printf("2 localOffset: %d(header: %d / recvLength: %d)\n", localOffset, header.length, recvLength);
 		return ERROR_CODE::NEED_EXTRA_DATA;
+	}
 
 	memcpy(data, buffer + localOffset, header.length);
 	localOffset += header.length;

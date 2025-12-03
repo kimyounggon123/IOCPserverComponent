@@ -183,9 +183,13 @@ unsigned int WINAPI IOCPserver::workerThread(LPVOID server_info)
 		socketinfo = io->owner; // IO_CONTEXT에서 역추적
 
 		if (socketinfo == nullptr)	continue;
+		/*
 		std::string type = socketinfo->sessionType == SESSION_TYPE::TCP ? "TCP" : "UDP";
 		std::string ioType = io->ioType == IO_TYPE::Request ? "Request" : "Response";
-		printf("io: %p (type: %s) (io type: %s)\n", io, type.c_str(), ioType.c_str());
+		printf("io: %p (type: %s) (io type: %s) (bytes: %d)\n",
+			io, type.c_str(), ioType.c_str(), cbTransferred);
+		*/
+
 		if (socketinfo->sessionType == SESSION_TYPE::TCP)
 			This->TCPLogic(socketinfo, io, retval, cbTransferred);
 		if (socketinfo->sessionType == SESSION_TYPE::UDP)
@@ -436,9 +440,13 @@ bool IOCPserver::UDPLogic(SOCKETINFO* socketinfo, IO_CONTEXT* io, INT retval, DW
 
 		if (io->ioType == IO_TYPE::Response)
 		{
-			if (socketinfo->isBroadcast) sessionManager.InputSOCKETINFOforUDP(socketinfo);
-			//socketinfo->subResponseCount();
 			socketinfo->setSendEvent();
+			if (socketinfo->isBroadcast)
+			{
+				//printf("broadcast sub response count\n");
+				sessionManager.ReleaseSOCKETINFOforUDP(socketinfo);
+			}
+			//socketinfo->subResponseCount();
 		}
 
 		// 서버/클라이언트 강제 종료 시
@@ -453,6 +461,10 @@ bool IOCPserver::UDPLogic(SOCKETINFO* socketinfo, IO_CONTEXT* io, INT retval, DW
 		// cbTransferred > 0 일 경우
 		if (io->ioType == IO_TYPE::Request)
 		{
+			if (!sessionManager.SOCKADDRisinHere(socketinfo->addr))
+			{
+				WelcomeToUDP(socketinfo);
+			}
 			/*if (!socketinfo->acceptCompleted.load())
 			{
 				if (!WelcomeToUDP(socketinfo, info))
@@ -462,7 +474,7 @@ bool IOCPserver::UDPLogic(SOCKETINFO* socketinfo, IO_CONTEXT* io, INT retval, DW
 				}
 			}*/
 
-			MakePacketUDP(socketinfo, cbTransferred);
+			if (cbTransferred != 0)	MakePacketUDP(socketinfo, cbTransferred);
 			if (!RecvUDP(socketinfo)) throw "request()";
 			socketinfo->updateActivity();
 		}
@@ -489,7 +501,7 @@ bool IOCPserver::MakeSocketInfoToRecvFrom()
 		ptr = new SOCKETINFO(SESSION_TYPE::UDP);
 		if (!ptr) throw "memory limit";
 
-		ptr->request.reset_overlapped(ptr->request.IO_buffer, true);
+		ptr->request.reset_overlapped(ptr->request.IO_buffer, IO_BUFFER_LEN, true);
 
 		retval = WSARecvFrom
 		(
@@ -509,7 +521,7 @@ bool IOCPserver::MakeSocketInfoToRecvFrom()
 			}
 		}
 
-		sessionManager.InputSOCKETINFOforUDP(ptr); // map에 저장
+		sessionManager.input_socketinfo(ptr); // map에 저장
 	}
 	catch (const char* msg)
 	{
@@ -523,7 +535,7 @@ bool IOCPserver::MakeSocketInfoToRecvFrom()
 bool IOCPserver::RecvUDP(SOCKETINFO* ptr)
 {
 	// get data from clients
-	ptr->request.reset_overlapped(ptr->request.IO_buffer, true);
+	ptr->request.reset_overlapped(ptr->request.IO_buffer, IO_BUFFER_LEN,  true);
 
 	INT retval;
 	DWORD recvbytes;
@@ -565,7 +577,8 @@ bool IOCPserver::MakePacketUDP(SOCKETINFO* ptr, DWORD cbTransferred)
 	bool result = true;
 	TaskQueueInput* input = nullptr;
 	size_t offset = 0;
-
+	/*
+	size_t offset = 0;
 	const int MAX_RESYNC = 5;
 	int resyncCount = 0;
 	
@@ -577,7 +590,8 @@ bool IOCPserver::MakePacketUDP(SOCKETINFO* ptr, DWORD cbTransferred)
 			if (input == nullptr) throw "input is nullptr!";
 			input->InputInfo(ptr,  ptr->addr);
 			
-			ERROR_CODE err = input->packet->deserialize(ptr->request.IO_buffer, cbTransferred - offset, offset);
+			ERROR_CODE err = input->packet->deserialize(ptr->request.IO_buffer, cbTransferred, offset);
+
 			if (err != ERROR_CODE::SUCCESS)
 			{
 				dispatcher.push(input);
@@ -599,6 +613,37 @@ bool IOCPserver::MakePacketUDP(SOCKETINFO* ptr, DWORD cbTransferred)
 		offset = 0;
 		cbTransferred = 0;
 		return result;
+	}
+	*/
+
+	try
+	{
+		if (!dispatcher.pop(input)) throw "memory limit";
+		if (!input) throw "input is nullptr!";
+
+		input->InputInfo(ptr, ptr->addr);
+
+		ERROR_CODE err = input->packet->deserialize(ptr->request.IO_buffer, cbTransferred, offset);
+		if (err != ERROR_CODE::SUCCESS)
+		{
+			dispatcher.push(input); // 다시 풀에 반환
+			//logs.log_error("deserialize failed", "MakePacketUDP()");
+			return false;
+		}
+
+		if (isGateClosed.load())
+			input->packet->set_header_type(PacketType::ServerIsClosed);
+
+		if (!dispatcher.enqueue(input, QueueInformation::PacketProcess))
+			throw "enqueue()";
+	}
+	catch (const char* msg)
+	{
+		if (input != nullptr)
+			dispatcher.push(input);
+
+		logs.log_error(msg, "MakePacketUDP()");
+		result = false;
 	}
 
 	return result;
@@ -626,26 +671,31 @@ unsigned int SendManager::workLoop()
 			if (output == nullptr) throw "output error";
 			if (output->isInvalid()) throw "output field error";
 
+			
 			DWORD waitResult = output->sessionInfo->waitSendEvent();
 			if (waitResult != WAIT_OBJECT_0)
 			{
 				if (waitResult == WAIT_TIMEOUT)	throw "waitMutex() time up";
 				if (waitResult == WAIT_FAILED) throw "waitSendEvent() failed";
 			}
-
+			
 			output->sessionInfo->addResponseCount(); // 전송 카운트 추가
 
 			// output->packet->setClientID(0); // 클라이언트로 전송 시 패킷에 저장된 client id를 초기화시킴
 
-			// Serialize
-			ERROR_CODE err = output->packet->serialize(output->sessionInfo->response.IO_buffer);
-			if (!err) throw "Serialize fail";
-
-			output->sessionInfo->response.reset_overlapped(output->sessionInfo->response.IO_buffer, output->packet->getPacketSerializedLength());
 
 
 			if (output->sessionInfo->sessionType == SESSION_TYPE::TCP)
 			{
+
+				output->sessionInfo->response.reset_overlapped
+				(output->sessionInfo->response.IO_buffer, output->packet->getPacketSerializedLength(), false);
+
+				// Serialize
+				ERROR_CODE err = output->packet->serialize(output->sessionInfo->response.IO_buffer);
+				if (!err) throw "Serialize fail TCP";
+
+
 				// Sending data
 				retval = WSASend(output->sessionInfo->sock, &output->sessionInfo->response.wsabuf, 1, &sendbytes,
 					0, &output->sessionInfo->response.overlapped, NULL);
@@ -660,6 +710,14 @@ unsigned int SendManager::workLoop()
 			
 			if (output->sessionInfo->sessionType == SESSION_TYPE::UDP)
 			{
+
+				output->sessionInfo->response.reset_overlapped
+				(output->sessionInfo->response.IO_buffer, output->packet->getPacketSerializedLength(), true);
+
+				// Serialize
+				ERROR_CODE err = output->packet->serialize(output->sessionInfo->response.IO_buffer);
+				if (!err) throw "Serialize fail UDP";
+
 				// Sending data
 				retval = WSASendTo(sockUDP,
 					&output->sessionInfo->response.wsabuf,

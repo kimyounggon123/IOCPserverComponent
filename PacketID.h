@@ -7,24 +7,19 @@
 struct PacketType
 {
 	static constexpr int32_t Base = 0;
-	static int count;
-	static int Next() { return Base + count++; }
-
-	static const int32_t Default;
-	static const int32_t ServerIsClosed;
+	static constexpr int32_t Default =			Base + 0;
+	static constexpr int32_t ServerIsClosed =	Base + 1;
 };
 
 struct PacketResult
 {
-	static constexpr int32_t Base = 0;
-	static int count;
-	static int Next() { return Base + count++; }
+	static constexpr int32_t Base = 0; 
 
-	static const int32_t Try;
-	static const int32_t Success;
-	static const int32_t Fail;
-	static const int32_t BroadCast;
-	static const int32_t WaitDatabase;
+	static constexpr int32_t Try =			Base + 0;
+	static constexpr int32_t Success =		Base + 1;
+	static constexpr int32_t Fail =			Base + 2;
+	static constexpr int32_t BroadCast =	Base + 3;
+	static constexpr int32_t WaitDatabase = Base + 4;
 };
 
 

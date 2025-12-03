@@ -14,7 +14,7 @@
 #include "Logs.h"
 #include "Packet.h"
 
-#define IO_BUFFER_LEN 5 * BUFFERSIZE
+#define IO_BUFFER_LEN 5 * 1024
 // session control class
 enum class IO_TYPE { Request, Response };
 
@@ -51,12 +51,13 @@ struct IO_CONTEXT {
 		owner = nullptr;
 	}
 
-	void reset_overlapped(char* buf = nullptr, bool ClearIO_buffer = false)
+	void reset_overlapped(char* buf = nullptr, ULONG len = IO_BUFFER_LEN, bool ClearIO_buffer = false)
 	{
+		if (len > IO_BUFFER_LEN || len < 1) len = IO_BUFFER_LEN;
 		memset(&overlapped, 0, sizeof(OVERLAPPED));
-		if (ClearIO_buffer) memset(&IO_buffer, 0, IO_BUFFER_LEN);
+		if (ClearIO_buffer) memset(&IO_buffer, 0, len);
 		wsabuf.buf = IO_buffer;
-		wsabuf.len = IO_BUFFER_LEN;
+		wsabuf.len = len;
 	}
 };
 
@@ -70,6 +71,7 @@ struct SOCKETINFO {
 	SESSION_TYPE sessionType;
 
 	std::atomic<bool> acceptCompleted;
+
 	std::atomic<int> responseCount;
 
 	HANDLE hEvent;
@@ -78,6 +80,7 @@ struct SOCKETINFO {
 	IO_CONTEXT response;
 
 	const bool isBroadcast;  // 브로드캐스트용이면 true
+	std::atomic<bool> inUse;
 
 	SOCKETINFO(SESSION_TYPE sessionType, bool isBroadcast = false)
 		: id(0),
@@ -87,7 +90,8 @@ struct SOCKETINFO {
 		responseCount(0),
 		sock(INVALID_SOCKET),
 		addr{},
-		isBroadcast(isBroadcast)
+		isBroadcast(isBroadcast),
+		inUse(false)
 	{
 		hEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
 		if (hEvent != NULL) SetEvent(hEvent);
@@ -178,6 +182,7 @@ public:
 
 	// UDP
 	bool inputUDPsession(const SOCKADDR_IN& addr);
+	bool SOCKADDRisinHere(const SOCKADDR_IN& addr);
 	bool deleteUDPsession(const SOCKADDR_IN& addr);
 	void CopyMemberPointersUDP(std::vector<SOCKADDR_IN>& out);
 
@@ -189,8 +194,10 @@ public:
 class IOCPSessionManager : public Room
 {
 	static IOCPSessionManager* instance;
-	ThreadSafeQueue<SOCKETINFO*> SOCKETINFOforUDPpool; // RecvFrom overlapped 전용
-	IOCPSessionManager(): Room(0), SOCKETINFOforUDPpool(true)
+
+	std::vector<SOCKETINFO*> SOCKETINFOforUDPpool; // RecvFrom overlapped 전용
+	std::mutex pool_mtx;
+	IOCPSessionManager(): Room(0)
 	{}
 
 public:
@@ -200,24 +207,84 @@ public:
 		return *instance;
 	}
 
-	bool InputSOCKETINFOforUDP(SOCKETINFO*& input)
+	bool MakeSOCKETINFOforUDPbroadcast(int count)
 	{
-		return SOCKETINFOforUDPpool.enqueue(input);
+		if (!SOCKETINFOforUDPpool.empty()) return false;
+		for (int i = 0; i < count; i++)
+		{
+			SOCKETINFO* forBroadcast = new SOCKETINFO(SESSION_TYPE::UDP, true);
+			SOCKETINFOforUDPpool.push_back(forBroadcast);
+		}
+		return true;
+	}
+	// 삭제
+	void deleteUDPSOCKET()
+	{
+		std::lock_guard<std::mutex> lock(pool_mtx);
+		for (auto si : SOCKETINFOforUDPpool)
+		{
+			SAFE_FREE(si);
+		}
+		SOCKETINFOforUDPpool.clear();
+	}
+
+	// 현재 풀 크기
+	size_t getUDPSocketPoolSize()
+	{
+		std::lock_guard<std::mutex> lock(pool_mtx);
+		return SOCKETINFOforUDPpool.size();
+	}
+
+	bool GetSOCKETINFOforUDP(SOCKETINFO*& output)
+	{
+		std::lock_guard<std::mutex> lock(pool_mtx);
+
+		for (auto si : SOCKETINFOforUDPpool)
+		{
+			if (!si->inUse.load())
+			{
+				si->inUse.store(true);
+				output = si;  // pop 없이 참조만 전달
+				return true;
+			}
+		}
+
+		output = nullptr;
+		return false; // 사용 가능한 객체 없음
+	}
+
+	void ReleaseSOCKETINFOforUDP(SOCKETINFO* input)
+	{
+		if (!input) return;
+		input->inUse.store(false);
+	}
+
+	/*
+	* 
+	* 	void InputSOCKETINFOforUDP(SOCKETINFO*& input)
+	{
+		SOCKETINFOforUDPpool.push_back(input);
 	}
 	bool PopSOCKETINFOforUDP(SOCKETINFO*& output)
 	{
 		return SOCKETINFOforUDPpool.dequeue(output);
 	}
+	*/
 
-	void deleteUDPSOCKET()
+	/*void deleteUDPSOCKET()
 	{
-		while (!SOCKETINFOforUDPpool.isEmpty())
+		while (!SOCKETINFOforUDPpool.empty())
 		{
 			SOCKETINFO* delThis = nullptr;
 			if (SOCKETINFOforUDPpool.dequeue(delThis))
 				SAFE_FREE(delThis);
 		}
 	}
+
+	size_t getUDPSocketPoolSize()
+	{
+		return SOCKETINFOforUDPpool.size();
+	}*/
 };
 
 #endif

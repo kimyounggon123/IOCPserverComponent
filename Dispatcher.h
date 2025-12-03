@@ -52,8 +52,8 @@ enum class QueueInformation
 class Dispatcher
 {
 	static Dispatcher* instance;
-	Dispatcher(): taskPool(true),
-		taskProcessWaiting(true, 100), taskToSendClient(true, 100)
+	Dispatcher(): taskPool(INFINITE),
+		taskProcessWaiting(100), taskToSendClient(100)
 	{}
 
 	ThreadSafeStack<TaskQueueInput*> taskPool; // ÀüÃ¼ Ç®
