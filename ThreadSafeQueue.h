@@ -28,28 +28,65 @@ public:
 
 	bool push(const T& input) {
 		
-		std::lock_guard<std::mutex> lock(stack_mtx);
-		safe_stack.push(input);
-		
-		stack_cv.notify_one();
+		try
+		{
+			std::lock_guard<std::mutex> lock(stack_mtx);
+			safe_stack.push(input);
+
+			stack_cv.notify_one();
+		}
+
+		catch (const std::exception& e)
+		{
+			// 표준 예외인 경우
+			std::cerr << "[push exception] " << e.what() << std::endl;
+			return false;
+		}
+		catch (...)
+		{
+			// 기타 예외
+			std::cerr << "[push unknown exception]" << std::endl;
+			return false;
+		}
+
 		return true;
 	}
 
 	bool pop(T& output) {
-		std::unique_lock<std::mutex> lock(stack_mtx);
+		try
+		{
 
-		if (timeout_ms == INFINITE) {
-			stack_cv.wait(lock, [this] { return !safe_stack.empty(); });
-		}
-		else {
-			if (!stack_cv.wait_for(lock, std::chrono::milliseconds(timeout_ms),
-				[this] { return !safe_stack.empty(); })) {
-				return false; // 타임아웃
+			std::unique_lock<std::mutex> lock(stack_mtx);
+
+			if (timeout_ms == INFINITE) {
+				stack_cv.wait(lock, [this] { return !safe_stack.empty(); });
 			}
+			else {
+				if (!stack_cv.wait_for(lock, std::chrono::milliseconds(timeout_ms),
+					[this] { return !safe_stack.empty(); })) {
+					return false; // 타임아웃
+				}
+			}
+
+			output = safe_stack.top();
+			safe_stack.pop();
+
+		}
+		catch (const std::exception& e)
+		{
+			// 표준 예외인 경우
+			std::cerr << "[pop exception] " << e.what() << std::endl;
+			return false;
+		}
+		catch (...)
+		{
+			// 기타 예외
+			std::cerr << "[pop unknown exception]" << std::endl;
+			return false;
 		}
 
-		output = safe_stack.top();
-		safe_stack.pop();
+		return true;
+		
 		return true;
 	}
 
@@ -76,6 +113,7 @@ public:
 	{}
 	ThreadSafeQueue(const ThreadSafeQueue&) = delete;
 	ThreadSafeQueue& operator=(const ThreadSafeQueue&) = delete;
+
 	bool enqueue(const T& input) {
 		std::lock_guard<std::mutex> lock(queue_mtx);
 		safe_queue.push(input);
@@ -103,6 +141,10 @@ public:
 	{
 		std::lock_guard<std::mutex> lock(queue_mtx);
 		return safe_queue.empty();
+	}
+	size_t size() {
+		std::lock_guard<std::mutex> lock(queue_mtx);
+		return safe_queue.size();
 	}
 };
 /*

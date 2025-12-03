@@ -81,6 +81,7 @@ struct SOCKETINFO {
 
 	const bool isBroadcast;  // 브로드캐스트용이면 true
 	std::atomic<bool> inUse;
+
 	SOCKETINFO(SESSION_TYPE sessionType, bool isBroadcast = false)
 		: id(0),
 		lastActive(GetTickCount64()),
@@ -193,8 +194,10 @@ public:
 class IOCPSessionManager : public Room
 {
 	static IOCPSessionManager* instance;
-	ThreadSafeStack<SOCKETINFO*> SOCKETINFOforUDPpool; // RecvFrom overlapped 전용
-	IOCPSessionManager(): Room(0), SOCKETINFOforUDPpool(INFINITE)
+
+	std::vector<SOCKETINFO*> SOCKETINFOforUDPpool; // RecvFrom overlapped 전용
+	std::mutex pool_mtx;
+	IOCPSessionManager(): Room(0)
 	{}
 
 public:
@@ -204,21 +207,76 @@ public:
 		return *instance;
 	}
 
-	bool InputSOCKETINFOforUDP(SOCKETINFO*& input)
+	bool MakeSOCKETINFOforUDPbroadcast(int count)
 	{
-		return SOCKETINFOforUDPpool.push(input);
+		if (!SOCKETINFOforUDPpool.empty()) return false;
+		for (int i = 0; i < count; i++)
+		{
+			SOCKETINFO* forBroadcast = new SOCKETINFO(SESSION_TYPE::UDP, true);
+			SOCKETINFOforUDPpool.push_back(forBroadcast);
+		}
+		return true;
+	}
+	// 삭제
+	void deleteUDPSOCKET()
+	{
+		std::lock_guard<std::mutex> lock(pool_mtx);
+		for (auto si : SOCKETINFOforUDPpool)
+		{
+			SAFE_FREE(si);
+		}
+		SOCKETINFOforUDPpool.clear();
+	}
+
+	// 현재 풀 크기
+	size_t getUDPSocketPoolSize()
+	{
+		std::lock_guard<std::mutex> lock(pool_mtx);
+		return SOCKETINFOforUDPpool.size();
+	}
+
+	bool GetSOCKETINFOforUDP(SOCKETINFO*& output)
+	{
+		std::lock_guard<std::mutex> lock(pool_mtx);
+
+		for (auto si : SOCKETINFOforUDPpool)
+		{
+			if (!si->inUse.load())
+			{
+				si->inUse.store(true);
+				output = si;  // pop 없이 참조만 전달
+				return true;
+			}
+		}
+
+		output = nullptr;
+		return false; // 사용 가능한 객체 없음
+	}
+
+	void ReleaseSOCKETINFOforUDP(SOCKETINFO* input)
+	{
+		if (!input) return;
+		input->inUse.store(false);
+	}
+
+	/*
+	* 
+	* 	void InputSOCKETINFOforUDP(SOCKETINFO*& input)
+	{
+		SOCKETINFOforUDPpool.push_back(input);
 	}
 	bool PopSOCKETINFOforUDP(SOCKETINFO*& output)
 	{
-		return SOCKETINFOforUDPpool.pop(output);
+		return SOCKETINFOforUDPpool.dequeue(output);
 	}
+	*/
 
-	void deleteUDPSOCKET()
+	/*void deleteUDPSOCKET()
 	{
-		while (!SOCKETINFOforUDPpool.isEmpty())
+		while (!SOCKETINFOforUDPpool.empty())
 		{
 			SOCKETINFO* delThis = nullptr;
-			if (SOCKETINFOforUDPpool.pop(delThis))
+			if (SOCKETINFOforUDPpool.dequeue(delThis))
 				SAFE_FREE(delThis);
 		}
 	}
@@ -226,7 +284,7 @@ public:
 	size_t getUDPSocketPoolSize()
 	{
 		return SOCKETINFOforUDPpool.size();
-	}
+	}*/
 };
 
 #endif
