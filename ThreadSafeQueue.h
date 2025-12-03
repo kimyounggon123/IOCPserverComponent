@@ -6,88 +6,106 @@
 #include <Windows.h>
 #include <atomic>
 #include <iostream>
+#include <chrono>
+#include <mutex>
+#include <condition_variable>
+
 template <typename T>
-class ThreadSafeStack 
+class ThreadSafeStack
 {
 	std::stack<T> safe_stack;
-	CRITICAL_SECTION stack_cs;
-	HANDLE stackEvent;
-	DWORD howMuchWait;
+	std::mutex stack_mtx;
+	std::condition_variable stack_cv;
+	DWORD timeout_ms;
 
 public:
-	ThreadSafeStack(bool hasEvent = false, DWORD howMuchWait = INFINITE): howMuchWait(howMuchWait)
-	{
-		InitializeCriticalSection(&stack_cs);
-		stackEvent = hasEvent ? CreateEvent(NULL, FALSE, FALSE, NULL) : NULL;
-	}
-	~ThreadSafeStack()
-	{
-		while (!safe_stack.empty())
-		{
-			safe_stack.pop();  
-		}
-		DeleteCriticalSection(&stack_cs);
-		if (stackEvent != NULL) CloseHandle(stackEvent);
-	}
+	ThreadSafeStack(DWORD timeout) : timeout_ms(timeout) {}
+	~ThreadSafeStack() = default;
+
+	// 복사 금지
 	ThreadSafeStack(const ThreadSafeStack&) = delete;
 	ThreadSafeStack& operator=(const ThreadSafeStack&) = delete;
 
-	bool push(const T& input)
-	{
-		EnterCriticalSection(&stack_cs);
+	bool push(const T& input) {
+		
+		std::lock_guard<std::mutex> lock(stack_mtx);
 		safe_stack.push(input);
-		if (stackEvent != NULL) SetEvent(stackEvent);
-		LeaveCriticalSection(&stack_cs);
-
+		
+		stack_cv.notify_one();
 		return true;
 	}
 
-	// 이 부분에서 패킷이 만약 빌 때 pop을 하는 경우가 생김.
-	bool pop(T& output)
-	{
-		if (stackEvent != NULL)
-		{
-			DWORD result = WaitForSingleObject(stackEvent, howMuchWait);
-			if (result == WAIT_TIMEOUT) return false;
+	bool pop(T& output) {
+		std::unique_lock<std::mutex> lock(stack_mtx);
+
+		if (timeout_ms == INFINITE) {
+			stack_cv.wait(lock, [this] { return !safe_stack.empty(); });
+		}
+		else {
+			if (!stack_cv.wait_for(lock, std::chrono::milliseconds(timeout_ms),
+				[this] { return !safe_stack.empty(); })) {
+				return false; // 타임아웃
+			}
 		}
 
-		EnterCriticalSection(&stack_cs);
-
-		if (safe_stack.empty())
-		{
-			LeaveCriticalSection(&stack_cs);
-			return false;
-		}
-
-
-		auto& val = safe_stack.top();
-		output = val;
-
-		//output = std::move(safe_queue.front());
+		output = safe_stack.top();
 		safe_stack.pop();
-
-		if (stackEvent != NULL && !safe_stack.empty())
-			SetEvent(stackEvent); // 마지막 pop 후 auto lock
-
-		/*
-		if (stackEvent != NULL && safe_stack.empty())
-			ResetEvent(stackEvent); // 마지막 pop 후 Manual lock
-		*/
-		LeaveCriticalSection(&stack_cs);
-
 		return true;
 	}
 
-	bool isEmpty()
-	{
-		EnterCriticalSection(&stack_cs);
-		bool empty = safe_stack.empty();
-		LeaveCriticalSection(&stack_cs);
-		return empty;
+	bool isEmpty() {
+		std::lock_guard<std::mutex> lock(stack_mtx);
+		return safe_stack.empty();
+	}
+
+	size_t size() {
+		std::lock_guard<std::mutex> lock(stack_mtx);
+		return safe_stack.size();
 	}
 };
 
+template<typename T>
+class ThreadSafeQueue {
+	std::queue<T> safe_queue;
+	std::mutex queue_mtx;
+	std::condition_variable queue_cv;
+	DWORD timeout_ms;
 
+public:
+	ThreadSafeQueue(DWORD timeout_ms) : timeout_ms(timeout_ms)
+	{}
+	ThreadSafeQueue(const ThreadSafeQueue&) = delete;
+	ThreadSafeQueue& operator=(const ThreadSafeQueue&) = delete;
+	bool enqueue(const T& input) {
+		std::lock_guard<std::mutex> lock(queue_mtx);
+		safe_queue.push(input);
+		
+		queue_cv.notify_one();
+		return true;
+	}
+
+	bool dequeue(T& output) {
+		std::unique_lock<std::mutex> lock(queue_mtx);
+
+		if (timeout_ms == INFINITE)
+			queue_cv.wait(lock, [this] { return !safe_queue.empty(); });
+
+		else if (!queue_cv.wait_for(lock, std::chrono::milliseconds(timeout_ms),
+			[this] { return !safe_queue.empty(); }))
+			return false;
+
+		output = safe_queue.front();
+		safe_queue.pop();
+		return true;
+	}
+
+	bool isEmpty() 
+	{
+		std::lock_guard<std::mutex> lock(queue_mtx);
+		return safe_queue.empty();
+	}
+};
+/*
 template <typename T>
 class ThreadSafeQueue
 {
@@ -103,6 +121,7 @@ public:
 	}
 	~ThreadSafeQueue()
 	{
+
 		while (!safe_queue.empty())
 		{
 			T object = safe_queue.front();
@@ -110,13 +129,20 @@ public:
 		}
 		DeleteCriticalSection(&queue_cs);
 		if (queueEvent != NULL) CloseHandle(queueEvent);
+		printf("ThreadSafeQueue destroyed\n");
 	}
 
 	ThreadSafeQueue(const ThreadSafeQueue&) = delete;
 	ThreadSafeQueue& operator=(const ThreadSafeQueue&) = delete;
 
+	
 	bool enqueue(const T& input)
 	{
+		if (queue_cs.LockCount < -1 || queue_cs.SpinCount == 0xFFFFFFFF) 
+		{
+			printf("Deadlock detected in ThreadSafeQueue::enqueue\n");
+			return false;
+		}
 		EnterCriticalSection(&queue_cs);
 		safe_queue.push(input);
 		LeaveCriticalSection(&queue_cs);
@@ -152,10 +178,6 @@ public:
 		if (queueEvent != NULL && !safe_queue.empty())
 			SetEvent(queueEvent); // 마지막 pop 후 manual lock
 
-		/*
-		if(queueEvent != NULL && safe_queue.empty())
-			ResetEvent(queueEvent); // 마지막 pop 후 manual lock
-		*/
 		LeaveCriticalSection(&queue_cs);
 
 		return true;
@@ -169,7 +191,7 @@ public:
 		return empty;
 	}
 };
-
+*/
 
 // Lock free structure
 template <typename T>

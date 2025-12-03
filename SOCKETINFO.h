@@ -14,7 +14,7 @@
 #include "Logs.h"
 #include "Packet.h"
 
-#define IO_BUFFER_LEN 5 * BUFFERSIZE
+#define IO_BUFFER_LEN 5 * 1024
 // session control class
 enum class IO_TYPE { Request, Response };
 
@@ -51,12 +51,13 @@ struct IO_CONTEXT {
 		owner = nullptr;
 	}
 
-	void reset_overlapped(char* buf = nullptr, bool ClearIO_buffer = false)
+	void reset_overlapped(char* buf = nullptr, ULONG len = IO_BUFFER_LEN, bool ClearIO_buffer = false)
 	{
+		if (len > IO_BUFFER_LEN || len < 1) len = IO_BUFFER_LEN;
 		memset(&overlapped, 0, sizeof(OVERLAPPED));
-		if (ClearIO_buffer) memset(&IO_buffer, 0, IO_BUFFER_LEN);
+		if (ClearIO_buffer) memset(&IO_buffer, 0, len);
 		wsabuf.buf = IO_buffer;
-		wsabuf.len = IO_BUFFER_LEN;
+		wsabuf.len = len;
 	}
 };
 
@@ -70,6 +71,7 @@ struct SOCKETINFO {
 	SESSION_TYPE sessionType;
 
 	std::atomic<bool> acceptCompleted;
+
 	std::atomic<int> responseCount;
 
 	HANDLE hEvent;
@@ -78,7 +80,7 @@ struct SOCKETINFO {
 	IO_CONTEXT response;
 
 	const bool isBroadcast;  // 브로드캐스트용이면 true
-
+	std::atomic<bool> inUse;
 	SOCKETINFO(SESSION_TYPE sessionType, bool isBroadcast = false)
 		: id(0),
 		lastActive(GetTickCount64()),
@@ -87,7 +89,8 @@ struct SOCKETINFO {
 		responseCount(0),
 		sock(INVALID_SOCKET),
 		addr{},
-		isBroadcast(isBroadcast)
+		isBroadcast(isBroadcast),
+		inUse(false)
 	{
 		hEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
 		if (hEvent != NULL) SetEvent(hEvent);
@@ -178,6 +181,7 @@ public:
 
 	// UDP
 	bool inputUDPsession(const SOCKADDR_IN& addr);
+	bool SOCKADDRisinHere(const SOCKADDR_IN& addr);
 	bool deleteUDPsession(const SOCKADDR_IN& addr);
 	void CopyMemberPointersUDP(std::vector<SOCKADDR_IN>& out);
 
@@ -189,8 +193,8 @@ public:
 class IOCPSessionManager : public Room
 {
 	static IOCPSessionManager* instance;
-	ThreadSafeQueue<SOCKETINFO*> SOCKETINFOforUDPpool; // RecvFrom overlapped 전용
-	IOCPSessionManager(): Room(0), SOCKETINFOforUDPpool(true)
+	ThreadSafeStack<SOCKETINFO*> SOCKETINFOforUDPpool; // RecvFrom overlapped 전용
+	IOCPSessionManager(): Room(0), SOCKETINFOforUDPpool(INFINITE)
 	{}
 
 public:
@@ -202,11 +206,11 @@ public:
 
 	bool InputSOCKETINFOforUDP(SOCKETINFO*& input)
 	{
-		return SOCKETINFOforUDPpool.enqueue(input);
+		return SOCKETINFOforUDPpool.push(input);
 	}
 	bool PopSOCKETINFOforUDP(SOCKETINFO*& output)
 	{
-		return SOCKETINFOforUDPpool.dequeue(output);
+		return SOCKETINFOforUDPpool.pop(output);
 	}
 
 	void deleteUDPSOCKET()
@@ -214,9 +218,14 @@ public:
 		while (!SOCKETINFOforUDPpool.isEmpty())
 		{
 			SOCKETINFO* delThis = nullptr;
-			if (SOCKETINFOforUDPpool.dequeue(delThis))
+			if (SOCKETINFOforUDPpool.pop(delThis))
 				SAFE_FREE(delThis);
 		}
+	}
+
+	size_t getUDPSocketPoolSize()
+	{
+		return SOCKETINFOforUDPpool.size();
 	}
 };
 

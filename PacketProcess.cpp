@@ -69,6 +69,7 @@ HandlerFunc PacketProcess::getFunc(TaskQueueInput* input)
 
 	return [this](TaskQueueInput* input)
 		{
+			printf("type: (%d, %d)", input->packet->get_type(), input->packet->get_process_result());
 			input->packet->set_process_result(PacketResult::Fail);
 			return logs.log_error("type error", "Packet process");
 		};

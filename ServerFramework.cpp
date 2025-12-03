@@ -75,7 +75,6 @@ void ServerFramework::WorkDebugger()
 
 			if (input.isKeyDown('D')) printf("delete list Count %lld\n", sessionManager.getDeleteNum());
 		}
-
 		sessionManager.destroyInvalidSOCKETINFO();
 		Sleep(50);
 	}

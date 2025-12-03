@@ -132,6 +132,18 @@ bool Room::inputUDPsession(const SOCKADDR_IN& addr)
 	return true;
 }
 
+bool Room::SOCKADDRisinHere(const SOCKADDR_IN& addr)
+{
+	return std::any_of(
+		udpTargets.begin(), udpTargets.end(),
+		[&](const SOCKADDR_IN& a) {
+			return a.sin_addr.s_addr == addr.sin_addr.s_addr &&
+				a.sin_port == addr.sin_port &&
+				a.sin_family == addr.sin_family;
+		}
+	);
+}
+
 bool Room::deleteUDPsession(const SOCKADDR_IN& addr)
 {
 	EnterCriticalSection(&udpCS);
