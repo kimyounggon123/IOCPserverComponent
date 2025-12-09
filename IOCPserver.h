@@ -36,11 +36,11 @@ class IOCPserver
 
 	// TCP
 	bool TCPLogic(SOCKETINFO* socketinfo, IO_CONTEXT* io, INT retval, DWORD cbTransferred);
+	bool LeaveServer(SOCKETINFO* ptr);
 	bool makeClientSocket(); 
 	bool welcomeClient(SOCKETINFO* ptr);
 	bool makePacketFromIOresult(SOCKETINFO* ptr, DWORD cbTransferred);
 	bool recvFromSOCKETINFO(SOCKETINFO* ptr);
-
 
 
 	// UDP

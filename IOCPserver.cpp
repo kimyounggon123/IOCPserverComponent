@@ -263,6 +263,13 @@ bool IOCPserver::TCPLogic(SOCKETINFO* socketinfo, IO_CONTEXT* io, INT retval, DW
 	}
 	return true;
 }
+
+bool IOCPserver::LeaveServer(SOCKETINFO* ptr)
+{
+
+	return true;
+}
+
 bool IOCPserver::makeClientSocket()
 {
 	// Session도 풀 형태로 만들어서 처리를 할까?

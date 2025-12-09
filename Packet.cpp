@@ -267,7 +267,7 @@ ERROR_CODE Packet::deserialize(const char* buffer, int recvLength, size_t& offse
 
 	if (localOffset + sizeof(PacketHeader) > recvLength)
 	{
-		printf("1 localOffset: %d(recvLength: %d)\n", localOffset, recvLength);
+		//printf("1 localOffset: %d(recvLength: %d)\n", localOffset, recvLength);
 		return ERROR_CODE::NEED_EXTRA_DATA;
 	}
 
@@ -277,7 +277,7 @@ ERROR_CODE Packet::deserialize(const char* buffer, int recvLength, size_t& offse
 
 	if (localOffset + header.length + sizeof(end_mark) > recvLength)
 	{
-		printf("2 localOffset: %d(header: %d / recvLength: %d)\n", localOffset, header.length, recvLength);
+		//printf("2 localOffset: %d(header: %d / recvLength: %d)\n", localOffset, header.length, recvLength);
 		return ERROR_CODE::NEED_EXTRA_DATA;
 	}
 

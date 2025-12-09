@@ -78,6 +78,9 @@
     <ClCompile Include="PacketID.cpp">
       <Filter>소스 파일\Packet</Filter>
     </ClCompile>
+    <ClCompile Include="Jsonify.cpp">
+      <Filter>소스 파일\Utils</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="stdafx.h">
@@ -121,6 +124,9 @@
     </ClInclude>
     <ClInclude Include="PacketID.h">
       <Filter>헤더 파일\Packet</Filter>
+    </ClInclude>
+    <ClInclude Include="Jsonity.h">
+      <Filter>헤더 파일\Utils</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
