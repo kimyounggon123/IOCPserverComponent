@@ -9,9 +9,9 @@
 
 struct TaskQueueInput
 {
-	SOCKETINFO* sessionInfo;
-	SOCKADDR_IN udpInfo;
-	Packet* packet;
+	SOCKETINFO* sessionInfo;	// TCP 통신 전용
+	SOCKADDR_IN udpInfo;		// UDP 통신 전용
+	Packet* packet; // 내용
 
 public:
 	TaskQueueInput(SOCKETINFO* sessionInfo = nullptr, const SOCKADDR_IN& udpInfo = SOCKADDR_IN{}) :
