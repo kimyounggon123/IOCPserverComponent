@@ -99,6 +99,11 @@ public:
 		std::lock_guard<std::mutex> lock(stack_mtx);
 		return safe_stack.size();
 	}
+
+	void setTimems(DWORD timems)
+	{
+		timeout_ms = timems;
+	}
 };
 
 template<typename T>
@@ -145,6 +150,11 @@ public:
 	size_t size() {
 		std::lock_guard<std::mutex> lock(queue_mtx);
 		return safe_queue.size();
+	}
+
+	void setTimems(DWORD timems)
+	{
+		timeout_ms = timems;
 	}
 };
 /*

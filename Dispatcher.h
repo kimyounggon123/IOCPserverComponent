@@ -6,32 +6,79 @@
 #include "Packet.h"
 #include "ThreadSafeQueue.h"
 
+enum class TARGET_TYPE 
+{
+	Single, // 단일 통신
+	Room,	// 전체 브로드캐스팅
+	Player	// Whisper 등의 특수 케이스
+};
+
+struct Target
+{
+	TARGET_TYPE type;
+	SOCKETINFO* tcp;
+	SOCKADDR_IN udp;
+	Room* room;
+
+	Target(): type(TARGET_TYPE::Single), tcp(nullptr), udp{}, room(nullptr)
+	{}
+	Target& operator=(const Target& other)
+	{
+		if (this != &other) {
+			type = other.type;
+			tcp = other.tcp;
+			udp = other.udp;
+			room = other.room;
+		}
+		return *this;
+	}
+	void Reset()
+	{
+		type = TARGET_TYPE::Single;
+		tcp = nullptr;
+		udp = {};
+		room = nullptr;
+	}
+};
 
 struct TaskQueueInput
 {
+	// 전송자 정보
 	SOCKETINFO* sessionInfo;	// TCP 통신 전용
 	SOCKADDR_IN udpInfo;		// UDP 통신 전용
+
+	Target target;
+	SESSION_TYPE sessionType;
+
 	Packet* packet; // 내용
 
 public:
 	TaskQueueInput(SOCKETINFO* sessionInfo = nullptr, const SOCKADDR_IN& udpInfo = SOCKADDR_IN{}) :
-		sessionInfo(sessionInfo), udpInfo(udpInfo), packet(new Packet())
+		sessionType(SESSION_TYPE::TCP),
+		sessionInfo(sessionInfo), udpInfo(udpInfo), 
+		packet(new Packet())
 	{}
-	TaskQueueInput& operator=(const TaskQueueInput& other)
+
+
+	void Reset()
 	{
-		if (this != &other) {
-			sessionInfo = other.sessionInfo; // session 정보는 deep copy하지 말도록.
-			udpInfo = other.udpInfo;
-			*packet = *other.packet;
-		}
-		return *this;
+		sessionInfo = nullptr;
+		udpInfo = {};
+		target.Reset();
+		packet = nullptr;
 	}
-	void InputInfo(SOCKETINFO* sockinfo, const SOCKADDR_IN& udpinfo)
-	{
-		sessionInfo = sockinfo;
-		udpInfo = udpinfo;
-	}
+
 	bool isInvalid() { return sessionInfo == nullptr || packet == nullptr; }
+
+	void copyFrom(const TaskQueueInput& other)
+	{
+		if (this == &other) return;
+		sessionInfo = other.sessionInfo;
+		udpInfo = other.udpInfo;
+		sessionType = other.sessionType;
+		target = other.target;
+		packet->copyFrom(*other.packet);
+	}
 
 	~TaskQueueInput()
 	{
@@ -40,26 +87,91 @@ public:
 };
 
 
+class TaskPool
+{
+	ThreadSafeStack<TaskQueueInput*> taskPool; // 전체 풀
 
-enum class QueueInformation
+public:
+
+	TaskPool(DWORD timems = INFINITE) : taskPool(timems)
+	{}
+
+	~TaskPool()
+	{
+		while (!taskPool.isEmpty())
+		{
+			TaskQueueInput* delThis = nullptr;
+			if (taskPool.pop(delThis))
+				SAFE_FREE(delThis);
+		}
+	}
+
+
+	bool Initialize();
+
+	bool push(TaskQueueInput*& input);
+	bool pop(TaskQueueInput*& output);
+	bool isEmpty()
+	{
+		return taskPool.isEmpty();
+	}
+};
+using Pipe = ThreadSafeQueue<TaskQueueInput*>;
+
+class DispatcherBasic
+{
+	TaskPool* taskPool;
+	Pipe pipe; // server에서 받아온 패킷, 세션 정보
+public:
+	DispatcherBasic():
+		taskPool(nullptr),
+		pipe(100)
+	{}
+	~DispatcherBasic()
+	{
+		UndoAll();
+		SAFE_FREE(taskPool);
+	}
+
+	bool initialize(int poolCount = 1000, DWORD timemsPipe = 100);
+	void UndoAll();
+
+	bool pushPool(TaskQueueInput*& input);
+	bool popPool(TaskQueueInput*& output);
+
+	bool enqueue(TaskQueueInput*& input);
+	bool dequeue(TaskQueueInput*& output);
+
+	bool isEmpty()
+	{
+		return taskPool->isEmpty();
+	}
+};
+
+// 작업 큐 디스패쳐
+
+/*
+session -> pipe -> packetprocess
+처리를 다 하면 
+packetprocesspool 결과 본 후에 packet 복사 후 -> pipe -> session
+*/
+
+
+
+enum class TaskInformation
 {
 	PacketProcess,
 	Send
 };
-
-
-// 작업 큐 디스패쳐
 class Dispatcher
 {
 	static Dispatcher* instance;
-	Dispatcher(): taskPool(INFINITE),
-		taskProcessWaiting(100), taskToSendClient(100)
+	Dispatcher():
+		taskWaiting(nullptr), taskSend(nullptr)
 	{}
 
-	ThreadSafeStack<TaskQueueInput*> taskPool; // 전체 풀
-
-	ThreadSafeQueue<TaskQueueInput*> taskProcessWaiting; // server에서 받아온 패킷, 세션 정보
-	ThreadSafeQueue<TaskQueueInput*> taskToSendClient; // SendManager가 사용하는 큐 / 작업 완료 시 해당 큐에 input
+	DispatcherBasic* taskWaiting;
+	DispatcherBasic* taskSend;
 
 public:
 	static Dispatcher& getInstance()
@@ -70,24 +182,22 @@ public:
 
 	~Dispatcher()
 	{
-		undoAllQueue();
-
-		while (!taskPool.isEmpty())
-		{
-			TaskQueueInput* delThis = nullptr;
-			if (taskPool.pop(delThis))
-				SAFE_FREE(delThis);
-		}
+		SAFE_FREE(taskWaiting);
+		SAFE_FREE(taskSend);
 	}
+
 	bool initialize();
-	void undoAllQueue();
 
-	bool push(TaskQueueInput*& input);
-	bool pop(TaskQueueInput*& output);
+	bool push(TaskQueueInput*& input, const TaskInformation& where);
+	bool pop(TaskQueueInput*& output, const TaskInformation& where);
 
-	bool enqueue(TaskQueueInput*& input, const QueueInformation& where);
-	bool dequeue(TaskQueueInput*& output, const QueueInformation& where);
-	bool isEmpty(const QueueInformation& where);
+	bool enqueue(TaskQueueInput*& input, const TaskInformation& where);
+	bool dequeue(TaskQueueInput*& output, const TaskInformation& where);
+
+	bool ProcessToSession(TaskQueueInput*& processResult);
+
+	bool isEmpty(const TaskInformation& where);
 };
+
 
 #endif

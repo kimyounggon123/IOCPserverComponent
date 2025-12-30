@@ -69,13 +69,13 @@ public:
 		memset(data, 0, BUFFERSIZE + 1);
 	}
 
-	Packet& operator=(const Packet& other)
+
+	void copyFrom(const Packet& other)
 	{
-		if (this != &other) {
-			header = other.header;
-			memcpy(data, other.data, BUFFERSIZE + 1);
-		}
-		return *this;
+		if (this == &other) return;
+		
+		header = other.header;
+		memcpy(data, other.data, header.length);
 	}
 
 	/// <control methods>

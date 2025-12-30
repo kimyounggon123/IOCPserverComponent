@@ -21,7 +21,7 @@ unsigned int PacketProcessThreadPool::workLoop() // in while loop
 		TaskQueueInput* output = nullptr;
 		try
 		{
-			if (!dispatcher.dequeue(output, QueueInformation::PacketProcess)) continue;
+			if (!dispatcher.dequeue(output, TaskInformation::PacketProcess)) continue;
 			if (output == nullptr) throw "output error";
 			if (output->isInvalid()) throw "output field error";
 
@@ -33,23 +33,19 @@ unsigned int PacketProcessThreadPool::workLoop() // in while loop
 			// 결과에 따라 다른 큐에 input
 			uint32_t pkResult = output->packet->get_process_result();
 
-			if (pkResult == PacketResult::Success || pkResult == PacketResult::Fail)
-			{
-				if (!dispatcher.enqueue(output, QueueInformation::Send)) throw "enqueueForSendProcess()";
-			}
-			else
+			if (pkResult != PacketResult::Success && pkResult != PacketResult::Fail)
 			{
 				output->packet->set_process_result(PacketResult::Fail);
-				dispatcher.enqueue(output, QueueInformation::Send);
-				throw "wrong packet result!!";
 			}
+			if (!dispatcher.ProcessToSession(output)) throw "enqueueForSendProcess()";
+
 		} 
 		catch (const char* msg)
 		{
 			if (output && !output->isInvalid())
 			{
 				output->packet->set_process_result(PacketResult::Fail);
-				dispatcher.enqueue(output, QueueInformation::Send);
+				dispatcher.ProcessToSession(output);
 			}
 			logs.log_error(msg, "PacketProcessThreadPool::work()");
 		}
