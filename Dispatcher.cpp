@@ -21,7 +21,7 @@ bool TaskPool::pop(TaskQueueInput*& output)
 	return taskPool.pop(output);
 }
 
-bool DispatcherBasic::initialize(int poolCount, DWORD timemsPipe)
+bool DispatcherUnit::initialize(int poolCount, DWORD timemsPipe)
 {
 	taskPool = new TaskPool(INFINITE);
 	pipe.setTimems(timemsPipe);
@@ -34,7 +34,7 @@ bool DispatcherBasic::initialize(int poolCount, DWORD timemsPipe)
 	}
 	return true;
 }
-void DispatcherBasic::UndoAll()
+void DispatcherUnit::UndoAll()
 {
 	TaskQueueInput* output = nullptr;
 
@@ -44,19 +44,19 @@ void DispatcherBasic::UndoAll()
 			taskPool->push(output);
 	}
 }
-bool DispatcherBasic::pushPool(TaskQueueInput*& input)
+bool DispatcherUnit::pushPool(TaskQueueInput*& input)
 {
 	return taskPool->push(input);
 }
-bool DispatcherBasic::popPool(TaskQueueInput*& output)
+bool DispatcherUnit::popPool(TaskQueueInput*& output)
 {
 	return taskPool->pop(output);
 }
-bool DispatcherBasic::enqueue(TaskQueueInput*& input)
+bool DispatcherUnit::enqueue(TaskQueueInput*& input)
 {
 	return pipe.enqueue(input);
 }
-bool DispatcherBasic::dequeue(TaskQueueInput*& output)
+bool DispatcherUnit::dequeue(TaskQueueInput*& output)
 {
 	return pipe.dequeue(output);
 }
@@ -65,8 +65,8 @@ bool DispatcherBasic::dequeue(TaskQueueInput*& output)
 Dispatcher* Dispatcher::instance = nullptr;
 bool Dispatcher::initialize()
 {
-	taskWaiting = new DispatcherBasic();
-	taskSend = new DispatcherBasic();
+	taskWaiting = new DispatcherUnit();
+	taskSend = new DispatcherUnit();
 
 	taskWaiting->initialize();
 	taskSend->initialize();

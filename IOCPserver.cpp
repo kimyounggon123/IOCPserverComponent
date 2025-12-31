@@ -386,7 +386,9 @@ bool IOCPserver::makePacketFromIOresult(SOCKETINFO* ptr, DWORD cbTransferred)
 		{
 			if (!dispatcher.pop(input, TaskInformation::PacketProcess)) throw "memory limit";
 			if (input == nullptr) throw "input is nullptr!";
+
 			input->sessionInfo = ptr;
+			input->sessionType = SESSION_TYPE::TCP;
 
 			size_t localOffset = offset; 
 			ERROR_CODE err = input->packet->deserialize(ptr->request.IO_buffer, cbTransferred - localOffset, localOffset);
@@ -630,6 +632,7 @@ bool IOCPserver::MakePacketUDP(SOCKETINFO* ptr, DWORD cbTransferred)
 
 		input->sessionInfo = ptr;
 		input->udpInfo = ptr->addr;
+		input->sessionType = SESSION_TYPE::UDP;
 
 		ERROR_CODE err = input->packet->deserialize(ptr->request.IO_buffer, cbTransferred, offset);
 		if (err != ERROR_CODE::SUCCESS)

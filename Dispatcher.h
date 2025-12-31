@@ -86,7 +86,6 @@ public:
 	}
 };
 
-
 class TaskPool
 {
 	ThreadSafeStack<TaskQueueInput*> taskPool; // 전체 풀
@@ -118,16 +117,16 @@ public:
 };
 using Pipe = ThreadSafeQueue<TaskQueueInput*>;
 
-class DispatcherBasic
+class DispatcherUnit
 {
 	TaskPool* taskPool;
 	Pipe pipe; // server에서 받아온 패킷, 세션 정보
 public:
-	DispatcherBasic():
+	DispatcherUnit():
 		taskPool(nullptr),
 		pipe(100)
 	{}
-	~DispatcherBasic()
+	~DispatcherUnit()
 	{
 		UndoAll();
 		SAFE_FREE(taskPool);
@@ -146,6 +145,8 @@ public:
 	{
 		return taskPool->isEmpty();
 	}
+
+
 };
 
 // 작업 큐 디스패쳐
@@ -155,7 +156,6 @@ session -> pipe -> packetprocess
 처리를 다 하면 
 packetprocesspool 결과 본 후에 packet 복사 후 -> pipe -> session
 */
-
 
 
 enum class TaskInformation
@@ -170,8 +170,8 @@ class Dispatcher
 		taskWaiting(nullptr), taskSend(nullptr)
 	{}
 
-	DispatcherBasic* taskWaiting;
-	DispatcherBasic* taskSend;
+	DispatcherUnit* taskWaiting;
+	DispatcherUnit* taskSend;
 
 public:
 	static Dispatcher& getInstance()
