@@ -197,6 +197,8 @@ public:
 	bool ProcessToSession(TaskQueueInput*& processResult);
 
 	bool isEmpty(const TaskInformation& where);
+
+	
 };
 
 

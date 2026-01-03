@@ -87,7 +87,7 @@ void ServerFramework::Quit()
 	if (iocp) iocp->Quit();
 	if (sendManager) sendManager->Quit();
 	if (packetThreadPool) packetThreadPool->Quit();
-	dispatcher.undoAllQueue();
+	
 }
 
 void ServerFramework::Run()

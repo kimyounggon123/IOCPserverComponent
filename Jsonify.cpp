@@ -12,7 +12,7 @@ bool Jsonity::parse(const std::string& jsonStr)
 }
 
 // JSON을 문자열로 반환
-std::string Jsonity::dump(int indent = -1) const
+std::string Jsonity::dump(int indent) const
 {
     return indent == -1 ? data.dump() : data.dump(indent);
 }

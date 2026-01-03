@@ -137,7 +137,7 @@ class Room
 	std::unordered_map<int, SOCKETINFO*> client_map; // 현재 접속한 클라이언트 목록들
 	CRITICAL_SECTION map_cs;
 
-	std::vector<SOCKADDR_IN> udpTargets; // 브로드캐스팅용
+	std::vector<SOCKADDR_IN> udpTargets; // UDP 브로드캐스팅용
 	CRITICAL_SECTION udpCS;
 
 	std::vector<SOCKETINFO*>deletedClients;
@@ -165,6 +165,9 @@ public:
 		DeleteCriticalSection(&deleteCS);
 	}
 
+	// virtual 
+	virtual void Update() = 0;
+
 	// TCP
 	bool input_socketinfo(SOCKETINFO* client_info);
 	bool find_socketinfo(int id, SOCKETINFO*& found);
@@ -186,7 +189,6 @@ public:
 	bool deleteUDPsession(const SOCKADDR_IN& addr);
 	void CopyMemberPointersUDP(std::vector<SOCKADDR_IN>& out);
 
-
 	void delete_all();
 
 };
@@ -206,6 +208,8 @@ public:
 		if (instance == nullptr) instance = new IOCPSessionManager;
 		return *instance;
 	}
+
+	void Update() override {}
 
 	bool MakeSOCKETINFOforUDPbroadcast(int count)
 	{
