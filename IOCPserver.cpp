@@ -374,7 +374,7 @@ bool IOCPserver::makePacketFromIOresult(SOCKETINFO* ptr, DWORD cbTransferred)
 	if (!ptr) return false;
 
 	bool result = true;
-	TaskQueueInput* input = nullptr;
+	TaskPTR input = nullptr;
 	size_t offset = 0;
 
 	const int MAX_RESYNC = 5;
@@ -394,14 +394,14 @@ bool IOCPserver::makePacketFromIOresult(SOCKETINFO* ptr, DWORD cbTransferred)
 			ERROR_CODE err = input->packet->deserialize(ptr->request.IO_buffer, cbTransferred - localOffset, localOffset);
 			if (err == ERROR_CODE::NEED_EXTRA_DATA)
 			{
-				dispatcher.push(input, TaskInformation::PacketProcess);
+				dispatcher.push(std::move(input), TaskInformation::PacketProcess);
 				break;
 			}
 			else if (err != ERROR_CODE::SUCCESS)
 			{
 				offset += 1; // 한 바이트씩 버리면서 다음 패킷 탐색 -> 그냥 전부 날려버릴까?
 				resyncCount++;
-				dispatcher.push(input, TaskInformation::PacketProcess);
+				dispatcher.push(std::move(input), TaskInformation::PacketProcess);
 				if (resyncCount >= MAX_RESYNC)
 				{
 					// 너무 많이 재동기화 했으면 남은 데이터 모두 버림
@@ -411,7 +411,7 @@ bool IOCPserver::makePacketFromIOresult(SOCKETINFO* ptr, DWORD cbTransferred)
 				continue;
 			}
 			if (isGateClosed.load()) input->packet->set_header_type(PacketType::ServerIsClosed);
-			if (!dispatcher.enqueue(input, TaskInformation::PacketProcess)) throw "enqueue()";
+			if (!dispatcher.enqueue(std::move(input), TaskInformation::PacketProcess)) throw "enqueue()";
 
 			offset = localOffset;
 		}
@@ -421,7 +421,7 @@ bool IOCPserver::makePacketFromIOresult(SOCKETINFO* ptr, DWORD cbTransferred)
 	{
 		if (input != nullptr)
 		{
-			dispatcher.push(input, TaskInformation::PacketProcess);
+			dispatcher.push(std::move(input), TaskInformation::PacketProcess);
 		}
 		result = logs.log_error(msg, "makePacketFromIOresult()");
 		offset = 0;
@@ -584,7 +584,7 @@ bool IOCPserver::MakePacketUDP(SOCKETINFO* ptr, DWORD cbTransferred)
 	if (!ptr) return false;
 
 	bool result = true;
-	TaskQueueInput* input = nullptr;
+	TaskPTR input = nullptr;
 	size_t offset = 0;
 	/*
 	size_t offset = 0;
@@ -637,7 +637,7 @@ bool IOCPserver::MakePacketUDP(SOCKETINFO* ptr, DWORD cbTransferred)
 		ERROR_CODE err = input->packet->deserialize(ptr->request.IO_buffer, cbTransferred, offset);
 		if (err != ERROR_CODE::SUCCESS)
 		{
-			dispatcher.push(input, TaskInformation::PacketProcess); // 다시 풀에 반환
+			dispatcher.push(std::move(input), TaskInformation::PacketProcess); // 다시 풀에 반환
 			//logs.log_error("deserialize failed", "MakePacketUDP()");
 			return false;
 		}
@@ -645,13 +645,13 @@ bool IOCPserver::MakePacketUDP(SOCKETINFO* ptr, DWORD cbTransferred)
 		if (isGateClosed.load())
 			input->packet->set_header_type(PacketType::ServerIsClosed);
 
-		if (!dispatcher.enqueue(input, TaskInformation::PacketProcess))
+		if (!dispatcher.enqueue(std::move(input), TaskInformation::PacketProcess))
 			throw "enqueue()";
 	}
 	catch (const char* msg)
 	{
 		if (input != nullptr)
-			dispatcher.push(input, TaskInformation::PacketProcess);
+			dispatcher.push(std::move(input), TaskInformation::PacketProcess);
 
 		logs.log_error(msg, "MakePacketUDP()");
 		result = false;
@@ -677,7 +677,7 @@ unsigned int SendManager::workLoop()
 
 	while (!exit_flag.load())
 	{
-		TaskQueueInput* output = nullptr;
+		TaskPTR output = nullptr;
 
 		try
 		{
@@ -758,7 +758,7 @@ unsigned int SendManager::workLoop()
 
 		if (output != nullptr)
 		{
-			dispatcher.push(output, TaskInformation::Send);
+			dispatcher.push(std::move(output), TaskInformation::Send);
 		}
 	}
 	return 0;

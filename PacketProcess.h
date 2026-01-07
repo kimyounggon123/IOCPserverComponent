@@ -26,12 +26,12 @@ struct PacketProcessKeyHash {
 };
 
 
-using HandlerFunc = std::function<bool(TaskQueueInput*)>;
+using HandlerFunc = std::function<bool(Task&)>;
 
 class PacketProcess
 {
-	bool testPacketFunc(TaskQueueInput* input);
-	bool closedServerLogic(TaskQueueInput* input);
+	bool testPacketFunc(Task& input);
+	bool closedServerLogic(Task& input);
 protected:
 	static std::unordered_map<PacketProcessKey, HandlerFunc, PacketProcessKeyHash> func_map;
 	bool isInitialized;
@@ -48,7 +48,7 @@ public:
 	virtual void initialize();
 	virtual bool registerThreadLocal() { return true; }
 	virtual bool closeThreadLocal() { return true; }
-	HandlerFunc getFunc(TaskQueueInput* input);
+	HandlerFunc getFunc(const Task& input);
 
 	bool getInitialized() noexcept { return isInitialized; }
 	

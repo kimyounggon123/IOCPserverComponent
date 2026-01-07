@@ -1,22 +1,22 @@
 #include "Dispatcher.h"
 
-bool TaskPool::Initialize()
+bool TaskPool::Initialize(int poolCount)
 {
-	for (int i = 0; i < 10000; i++)
+	for (int i = 0; i < poolCount; i++)
 	{
-		TaskQueueInput* task = new TaskQueueInput();
+		TaskPTR task = std::make_unique<Task>();
 		if (!task) return false;
-		if (!taskPool.push(task)) return false;
+		if (!taskPool.push(std::move(task))) return false;
 	}
 	return true;
 }
-bool TaskPool::push(TaskQueueInput*& input)
+bool TaskPool::push(TaskPTR input)
 {
 	if (input == nullptr) return false;
 	input->Reset();
-	return taskPool.push(input);
+	return taskPool.push(std::move(input));
 }
-bool TaskPool::pop(TaskQueueInput*& output)
+bool TaskPool::pop(TaskPTR& output)
 {
 	return taskPool.pop(output);
 }
@@ -24,39 +24,33 @@ bool TaskPool::pop(TaskQueueInput*& output)
 bool DispatcherUnit::initialize(int poolCount, DWORD timemsPipe)
 {
 	taskPool = new TaskPool(INFINITE);
+	taskPool->Initialize(poolCount);
 	pipe.setTimems(timemsPipe);
-
-	for (int i = 0; i < poolCount; i++)
-	{
-		TaskQueueInput* task = new TaskQueueInput();
-		if (!task) return false;
-		if (!taskPool->push(task)) return false;
-	}
 	return true;
 }
 void DispatcherUnit::UndoAll()
 {
-	TaskQueueInput* output = nullptr;
+	TaskPTR output = nullptr;
 
 	while (!pipe.isEmpty())
 	{
 		if (pipe.dequeue(output))
-			taskPool->push(output);
+			pushPool(std::move(output));
 	}
 }
-bool DispatcherUnit::pushPool(TaskQueueInput*& input)
+bool DispatcherUnit::pushPool(TaskPTR input)
 {
-	return taskPool->push(input);
+	return taskPool->push(std::move(input));
 }
-bool DispatcherUnit::popPool(TaskQueueInput*& output)
+bool DispatcherUnit::popPool(TaskPTR& output)
 {
 	return taskPool->pop(output);
 }
-bool DispatcherUnit::enqueue(TaskQueueInput*& input)
+bool DispatcherUnit::enqueue(TaskPTR input)
 {
-	return pipe.enqueue(input);
+	return pipe.enqueue(std::move(input));
 }
-bool DispatcherUnit::dequeue(TaskQueueInput*& output)
+bool DispatcherUnit::dequeue(TaskPTR& output)
 {
 	return pipe.dequeue(output);
 }
@@ -73,17 +67,17 @@ bool Dispatcher::initialize()
 	return true;
 }
 
-bool Dispatcher::push(TaskQueueInput*& input, const TaskInformation& where)
+bool Dispatcher::push(TaskPTR input, const TaskInformation& where)
 {
 	bool result = false;
 	switch (where)
 	{
 	case TaskInformation::PacketProcess:
-		result = taskWaiting->pushPool(input);
+		result = taskWaiting->pushPool(std::move(input));
 		break;
 
 	case TaskInformation::Send:
-		result = taskSend->pushPool(input);
+		result = taskSend->pushPool(std::move(input));
 		break;
 
 	default:
@@ -92,7 +86,7 @@ bool Dispatcher::push(TaskQueueInput*& input, const TaskInformation& where)
 	}
 	return result;
 }
-bool Dispatcher::pop(TaskQueueInput*& output, const TaskInformation& where)
+bool Dispatcher::pop(TaskPTR& output, const TaskInformation& where)
 {
 	bool result = false;
 	switch (where)
@@ -112,17 +106,17 @@ bool Dispatcher::pop(TaskQueueInput*& output, const TaskInformation& where)
 	return result;
 }
 
-bool Dispatcher::enqueue(TaskQueueInput*& input, const TaskInformation& where)
+bool Dispatcher::enqueue(TaskPTR input, const TaskInformation& where)
 {
 	bool result = false;
 	switch (where)
 	{
 	case TaskInformation::PacketProcess:
-		result = taskWaiting->enqueue(input);
+		result = taskWaiting->enqueue(std::move(input));
 		break;
 
 	case TaskInformation::Send:
-		result = taskSend->enqueue(input);
+		result = taskSend->enqueue(std::move(input));
 		break;
 
 	default:
@@ -133,7 +127,7 @@ bool Dispatcher::enqueue(TaskQueueInput*& input, const TaskInformation& where)
 }
 
 
-bool Dispatcher::dequeue(TaskQueueInput*& output, const TaskInformation& where)
+bool Dispatcher::dequeue(TaskPTR& output, const TaskInformation& where)
 {
 	bool result = false;
 
@@ -156,13 +150,20 @@ bool Dispatcher::dequeue(TaskQueueInput*& output, const TaskInformation& where)
 
 
 
-bool Dispatcher::ProcessToSession(TaskQueueInput*& processResult)
+bool Dispatcher::ProcessToSession(TaskPTR processResult)
 {
-	TaskQueueInput* toSession = nullptr;
+	// 1. session task pool에서 task 받아 옴
+	TaskPTR toSession = nullptr;
 	if (!pop(toSession, TaskInformation::Send)) return false;
+
+	// 2. 정보 복사
 	toSession->copyFrom(*processResult);
-	if (!push(processResult, TaskInformation::PacketProcess)) return false;
-	if (!enqueue(toSession, TaskInformation::Send)) return false;
+
+	// 3. process task는 이제 필요 없으므로 다시 반환
+	if (!push(std::move(processResult), TaskInformation::PacketProcess)) return false;
+	
+	// 4. session task pipe에 전송
+	if (!enqueue(std::move(toSession), TaskInformation::Send)) return false;
 	return true;
 }
 

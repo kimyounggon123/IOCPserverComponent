@@ -18,7 +18,7 @@ unsigned int PacketProcessThreadPool::workLoop() // in while loop
 
 	while (!exit_flag.load())
 	{
-		TaskQueueInput* output = nullptr;
+		TaskPTR output = nullptr;
 		try
 		{
 			if (!dispatcher.dequeue(output, TaskInformation::PacketProcess)) continue;
@@ -26,8 +26,8 @@ unsigned int PacketProcessThreadPool::workLoop() // in while loop
 			if (output->isInvalid()) throw "output field error";
 
 			/// packet process
-			auto func = packetProcess->getFunc(output);
-			result = func(output);
+			auto func = packetProcess->getFunc(*output);
+			result = func(*output);
 			//if (!result) throw "Packet process";
 		
 			// 결과에 따라 다른 큐에 input
@@ -37,7 +37,7 @@ unsigned int PacketProcessThreadPool::workLoop() // in while loop
 			{
 				output->packet->set_process_result(PacketResult::Fail);
 			}
-			if (!dispatcher.ProcessToSession(output)) throw "enqueueForSendProcess()";
+			if (!dispatcher.ProcessToSession(std::move(output))) throw "enqueueForSendProcess()";
 
 		} 
 		catch (const char* msg)
@@ -45,7 +45,7 @@ unsigned int PacketProcessThreadPool::workLoop() // in while loop
 			if (output && !output->isInvalid())
 			{
 				output->packet->set_process_result(PacketResult::Fail);
-				dispatcher.ProcessToSession(output);
+				dispatcher.ProcessToSession(std::move(output));
 			}
 			logs.log_error(msg, "PacketProcessThreadPool::work()");
 		}

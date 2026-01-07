@@ -41,7 +41,7 @@ struct Target
 	}
 };
 
-struct TaskQueueInput
+struct Task
 {
 	// 전송자 정보
 	SOCKETINFO* sessionInfo;	// TCP 통신 전용
@@ -53,7 +53,7 @@ struct TaskQueueInput
 	Packet* packet; // 내용
 
 public:
-	TaskQueueInput(SOCKETINFO* sessionInfo = nullptr, const SOCKADDR_IN& udpInfo = SOCKADDR_IN{}) :
+	Task(SOCKETINFO* sessionInfo = nullptr, const SOCKADDR_IN& udpInfo = SOCKADDR_IN{}) :
 		sessionType(SESSION_TYPE::TCP),
 		sessionInfo(sessionInfo), udpInfo(udpInfo), 
 		packet(new Packet())
@@ -65,12 +65,12 @@ public:
 		sessionInfo = nullptr;
 		udpInfo = {};
 		target.Reset();
-		packet = nullptr;
+		packet->CLEAR_PACKET();
 	}
 
 	bool isInvalid() { return sessionInfo == nullptr || packet == nullptr; }
 
-	void copyFrom(const TaskQueueInput& other)
+	void copyFrom(const Task& other)
 	{
 		if (this == &other) return;
 		sessionInfo = other.sessionInfo;
@@ -80,43 +80,36 @@ public:
 		packet->copyFrom(*other.packet);
 	}
 
-	~TaskQueueInput()
+	~Task()
 	{
 		SAFE_FREE(packet);
 	}
 };
 
+
+using TaskPTR = std::unique_ptr<Task>;
 class TaskPool
 {
-	ThreadSafeStack<TaskQueueInput*> taskPool; // 전체 풀
+	ThreadSafeStack<TaskPTR> taskPool; // 전체 풀
 
 public:
 
 	TaskPool(DWORD timems = INFINITE) : taskPool(timems)
 	{}
-
-	~TaskPool()
-	{
-		while (!taskPool.isEmpty())
-		{
-			TaskQueueInput* delThis = nullptr;
-			if (taskPool.pop(delThis))
-				SAFE_FREE(delThis);
-		}
-	}
+	~TaskPool() = default;   // ← delete 필요 없음
 
 
-	bool Initialize();
-
-	bool push(TaskQueueInput*& input);
-	bool pop(TaskQueueInput*& output);
+	bool Initialize(int poolCount = 1000);
+	bool push(TaskPTR task);
+	bool pop(TaskPTR& out);
 	bool isEmpty()
 	{
 		return taskPool.isEmpty();
 	}
 };
-using Pipe = ThreadSafeQueue<TaskQueueInput*>;
 
+
+using Pipe = ThreadSafeQueue<TaskPTR>;
 class DispatcherUnit
 {
 	TaskPool* taskPool;
@@ -135,11 +128,11 @@ public:
 	bool initialize(int poolCount = 1000, DWORD timemsPipe = 100);
 	void UndoAll();
 
-	bool pushPool(TaskQueueInput*& input);
-	bool popPool(TaskQueueInput*& output);
+	bool pushPool(TaskPTR input);		 // into pool
+	bool popPool(TaskPTR& output);	 // from pool
 
-	bool enqueue(TaskQueueInput*& input);
-	bool dequeue(TaskQueueInput*& output);
+	bool enqueue(TaskPTR input);    // into pipe
+	bool dequeue(TaskPTR& output);  // from pipe
 
 	bool isEmpty()
 	{
@@ -188,13 +181,13 @@ public:
 
 	bool initialize();
 
-	bool push(TaskQueueInput*& input, const TaskInformation& where);
-	bool pop(TaskQueueInput*& output, const TaskInformation& where);
+	bool push(TaskPTR input, const TaskInformation& where);
+	bool pop(TaskPTR& output, const TaskInformation& where);
 
-	bool enqueue(TaskQueueInput*& input, const TaskInformation& where);
-	bool dequeue(TaskQueueInput*& output, const TaskInformation& where);
+	bool enqueue(TaskPTR input, const TaskInformation& where);
+	bool dequeue(TaskPTR& output, const TaskInformation& where);
 
-	bool ProcessToSession(TaskQueueInput*& processResult);
+	bool ProcessToSession(TaskPTR processResult);
 
 	bool isEmpty(const TaskInformation& where);
 

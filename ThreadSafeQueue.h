@@ -19,6 +19,7 @@ class ThreadSafeStack
 	DWORD timeout_ms;
 
 public:
+
 	ThreadSafeStack(DWORD timeout) : timeout_ms(timeout) {}
 	~ThreadSafeStack() = default;
 
@@ -26,12 +27,12 @@ public:
 	ThreadSafeStack(const ThreadSafeStack&) = delete;
 	ThreadSafeStack& operator=(const ThreadSafeStack&) = delete;
 
-	bool push(const T& input) {
+	bool push(T input) {
 		
 		try
 		{
 			std::lock_guard<std::mutex> lock(stack_mtx);
-			safe_stack.push(input);
+			safe_stack.push(std::move(input));
 
 			stack_cv.notify_one();
 		}
@@ -68,7 +69,7 @@ public:
 				}
 			}
 
-			output = safe_stack.top();
+			output = std::move(safe_stack.top());
 			safe_stack.pop();
 
 		}
@@ -86,8 +87,7 @@ public:
 		}
 
 		return true;
-		
-		return true;
+
 	}
 
 	bool isEmpty() {
@@ -119,9 +119,9 @@ public:
 	ThreadSafeQueue(const ThreadSafeQueue&) = delete;
 	ThreadSafeQueue& operator=(const ThreadSafeQueue&) = delete;
 
-	bool enqueue(const T& input) {
+	bool enqueue(T input) {
 		std::lock_guard<std::mutex> lock(queue_mtx);
-		safe_queue.push(input);
+		safe_queue.push(std::move(input));
 		
 		queue_cv.notify_one();
 		return true;
@@ -137,17 +137,18 @@ public:
 			[this] { return !safe_queue.empty(); }))
 			return false;
 
-		output = safe_queue.front();
+		output = std::move(safe_queue.front());   // move
 		safe_queue.pop();
 		return true;
 	}
 
-	bool isEmpty() 
+	bool isEmpty()
 	{
 		std::lock_guard<std::mutex> lock(queue_mtx);
 		return safe_queue.empty();
 	}
-	size_t size() {
+	size_t size()
+	{
 		std::lock_guard<std::mutex> lock(queue_mtx);
 		return safe_queue.size();
 	}
@@ -157,6 +158,10 @@ public:
 		timeout_ms = timems;
 	}
 };
+
+
+
+
 /*
 template <typename T>
 class ThreadSafeQueue

@@ -1,18 +1,6 @@
 #include "PacketProcess.h"
 std::unordered_map<PacketProcessKey, HandlerFunc, PacketProcessKeyHash> PacketProcess::func_map;
 
-void PacketProcess::initialize()
-{
-	func_map.emplace(
-		PacketProcessKey{ PacketType::Default, PacketResult::Try},
-		[this](TaskQueueInput* input) {return testPacketFunc(input); }
-	);
-	func_map.emplace(
-		PacketProcessKey{ PacketType::ServerIsClosed, PacketResult::Try },
-		[this](TaskQueueInput* input) {return closedServerLogic(input); }
-	);
-}
-
 std::string PacketProcess::hash_function(const char* key, const char* to_hash) {
 	if (!key || !to_hash) return "";
 	unsigned long long hash_value = 5381;
@@ -39,38 +27,48 @@ std::string PacketProcess::hash_function(const char* key, const char* to_hash) {
 	return hash_result;
 }
 
-
-
-bool PacketProcess::testPacketFunc(TaskQueueInput* input)
+void PacketProcess::initialize()
 {
-	if (input == nullptr) return logs.log_error("got nullptr");
+	func_map.emplace(
+		PacketProcessKey{ PacketType::Default, PacketResult::Try},
+		[this](Task& input) {return testPacketFunc(input); }
+	);
+	func_map.emplace(
+		PacketProcessKey{ PacketType::ServerIsClosed, PacketResult::Try },
+		[this](Task& input) {return closedServerLogic(input); }
+	);
+}
 
+
+
+
+bool PacketProcess::testPacketFunc(Task& input)
+{
 	volatile double result = 0; // 부하를 위한 컴파일러 최적화 최소화
 	for (int i = 0; i < 10000; ++i) // 
 		result += sqrt(i * 1.23);
 
-	input->packet->set_process_result(PacketResult::Success);
+	input.packet->set_process_result(PacketResult::Success);
 	return true;
 }
 
-bool PacketProcess::closedServerLogic(TaskQueueInput* input)
+bool PacketProcess::closedServerLogic(Task& input)
 {
-	if (input == nullptr) return logs.log_error("got nullptr");
 	logs.log("Server is closed.");
-	input->packet->set_process_result(PacketResult::Fail);
+	input.packet->set_process_result(PacketResult::Fail);
 	return true;
 }
 
-HandlerFunc PacketProcess::getFunc(TaskQueueInput* input)
+HandlerFunc PacketProcess::getFunc(const Task& input)
 {
-	PacketProcessKey key{ input->packet->get_type(), input->packet->get_process_result()};
+	PacketProcessKey key{ input.packet->get_type(), input.packet->get_process_result()};
 	auto func = func_map.find(key);
 	if (func != func_map.end()) return func->second;
 
-	return [this](TaskQueueInput* input)
+	return [this](Task& input)
 		{
-			printf("type: (%d, %d)", input->packet->get_type(), input->packet->get_process_result());
-			input->packet->set_process_result(PacketResult::Fail);
+			printf("Type: (%d), Result: (%d)", input.packet->get_type(), input.packet->get_process_result());
+			input.packet->set_process_result(PacketResult::Fail);
 			return logs.log_error("type error", "Packet process");
 		};
 }
