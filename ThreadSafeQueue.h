@@ -33,7 +33,6 @@ public:
 		{
 			std::lock_guard<std::mutex> lock(stack_mtx);
 			safe_stack.push(std::move(input));
-
 			stack_cv.notify_one();
 		}
 
@@ -59,12 +58,13 @@ public:
 
 			std::unique_lock<std::mutex> lock(stack_mtx);
 
-			if (timeout_ms == INFINITE) {
+			if (timeout_ms == INFINITE)
+			{
 				stack_cv.wait(lock, [this] { return !safe_stack.empty(); });
 			}
 			else {
-				if (!stack_cv.wait_for(lock, std::chrono::milliseconds(timeout_ms),
-					[this] { return !safe_stack.empty(); })) {
+				if (!stack_cv.wait_for(lock, std::chrono::milliseconds(timeout_ms), [this] { return !safe_stack.empty(); })) 
+				{
 					return false; // е╦юс╬ф©Т
 				}
 			}

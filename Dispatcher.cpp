@@ -10,6 +10,7 @@ bool TaskPool::Initialize(int poolCount)
 	}
 	return true;
 }
+
 bool TaskPool::push(TaskPTR input)
 {
 	if (input == nullptr) return false;
@@ -28,6 +29,7 @@ bool DispatcherUnit::initialize(int poolCount, DWORD timemsPipe)
 	pipe.setTimems(timemsPipe);
 	return true;
 }
+
 void DispatcherUnit::UndoAll()
 {
 	TaskPTR output = nullptr;
@@ -38,17 +40,29 @@ void DispatcherUnit::UndoAll()
 			pushPool(std::move(output));
 	}
 }
-bool DispatcherUnit::pushPool(TaskPTR input)
+
+bool DispatcherUnit::pushPool(TaskPTR&& input)
 {
-	return taskPool->push(std::move(input));
+	if (!taskPool->push(std::move(input)))
+	{
+		std::terminate();
+		return false;
+	}
+	return true;
 }
 bool DispatcherUnit::popPool(TaskPTR& output)
 {
 	return taskPool->pop(output);
 }
-bool DispatcherUnit::enqueue(TaskPTR input)
+
+bool DispatcherUnit::enqueue(TaskPTR&& input)
 {
-	return pipe.enqueue(std::move(input));
+	if (!pipe.enqueue(std::move(input)))
+	{
+		std::terminate();   // or abort, log+exit
+		return false;
+	}
+	return true;
 }
 bool DispatcherUnit::dequeue(TaskPTR& output)
 {
@@ -59,11 +73,15 @@ bool DispatcherUnit::dequeue(TaskPTR& output)
 Dispatcher* Dispatcher::instance = nullptr;
 bool Dispatcher::initialize()
 {
+	if (isInitialized) return true;
+
 	taskWaiting = new DispatcherUnit();
 	taskSend = new DispatcherUnit();
 
 	taskWaiting->initialize();
 	taskSend->initialize();
+
+	isInitialized = true;
 	return true;
 }
 

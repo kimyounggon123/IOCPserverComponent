@@ -128,10 +128,10 @@ public:
 	bool initialize(int poolCount = 1000, DWORD timemsPipe = 100);
 	void UndoAll();
 
-	bool pushPool(TaskPTR input);		 // into pool
+	bool pushPool(TaskPTR&& input);		 // into pool
 	bool popPool(TaskPTR& output);	 // from pool
 
-	bool enqueue(TaskPTR input);    // into pipe
+	bool enqueue(TaskPTR&& input);    // into pipe
 	bool dequeue(TaskPTR& output);  // from pipe
 
 	bool isEmpty()
@@ -156,15 +156,18 @@ enum class TaskInformation
 	PacketProcess,
 	Send
 };
+
 class Dispatcher
 {
-	static Dispatcher* instance;
-	Dispatcher():
-		taskWaiting(nullptr), taskSend(nullptr)
-	{}
 
+	bool isInitialized;
 	DispatcherUnit* taskWaiting;
 	DispatcherUnit* taskSend;
+
+	static Dispatcher* instance;
+	Dispatcher():isInitialized(false),
+		taskWaiting(nullptr), taskSend(nullptr)
+	{}
 
 public:
 	static Dispatcher& getInstance()

@@ -42,11 +42,6 @@ unsigned int PacketProcessThreadPool::workLoop() // in while loop
 		} 
 		catch (const char* msg)
 		{
-			if (output && !output->isInvalid())
-			{
-				output->packet->set_process_result(PacketResult::Fail);
-				dispatcher.ProcessToSession(std::move(output));
-			}
 			logs.log_error(msg, "PacketProcessThreadPool::work()");
 		}
 	}

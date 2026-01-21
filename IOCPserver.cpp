@@ -419,10 +419,6 @@ bool IOCPserver::makePacketFromIOresult(SOCKETINFO* ptr, DWORD cbTransferred)
 
 	catch (const char* msg)
 	{
-		if (input != nullptr)
-		{
-			dispatcher.push(std::move(input), TaskInformation::PacketProcess);
-		}
 		result = logs.log_error(msg, "makePacketFromIOresult()");
 		offset = 0;
 		cbTransferred = 0;
@@ -650,9 +646,6 @@ bool IOCPserver::MakePacketUDP(SOCKETINFO* ptr, DWORD cbTransferred)
 	}
 	catch (const char* msg)
 	{
-		if (input != nullptr)
-			dispatcher.push(std::move(input), TaskInformation::PacketProcess);
-
 		logs.log_error(msg, "MakePacketUDP()");
 		result = false;
 	}
