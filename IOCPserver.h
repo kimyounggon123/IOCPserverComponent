@@ -23,14 +23,12 @@ class IOCPserver
 	USHORT portUDP; // -1 : invalid
 	SOCKET sockUDP; // 
 
-
-
 	HANDLE IOCP;
 	size_t countThreads;
 
 	Logs& logs;
 	IOCPSessionManager& sessionManager;
-	Dispatcher& dispatcher;
+	DispatcherHub& dispatcher;
 
 	std::vector<HANDLE> workerThreads;
 
@@ -60,6 +58,7 @@ public:
 	void closeServerGate();
 	void Quit();
 	
+	void WaitThreadClosing();
 	static unsigned int WINAPI workerThread(LPVOID server_info); 
 
 	SOCKET GetUDPSocket() const { return sockUDP; }
@@ -69,14 +68,14 @@ public:
 
 class SendManager : public ThreadPool
 {
-	Dispatcher& dispatcher;
+	DispatcherHub& dispatcher;
 	SOCKET sockUDP; // UDP 전용
 
 	unsigned int workLoop() override;
 public:
 	SendManager(int poolCapacity, SOCKET sockUDP) // udpSock은 TCP를 쓸 거면 invalid_socket
 		: ThreadPool(poolCapacity), sockUDP(sockUDP),
-		dispatcher(Dispatcher::getInstance())
+		dispatcher(DispatcherHub::getInstance())
 	{}
 
 	bool initialize() override;

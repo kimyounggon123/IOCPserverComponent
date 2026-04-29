@@ -24,6 +24,20 @@ bool ThreadPool::Start()
 	return true;
 }
 
+void ThreadPool::WaitThreadClosing()
+{
+	DWORD result = WaitForMultipleObjects(
+		static_cast<DWORD>(poolCapacity),
+		threadInPool,   // ÇÙ½É
+		TRUE,
+		INFINITE
+	);
+	if (result == WAIT_OBJECT_0)
+	{
+		logs.log("Threads are over.", "UserThreadPool");
+	}
+}
+
 unsigned int WINAPI ThreadPool::workerThread(LPVOID param)
 {
 	ThreadPool* This = reinterpret_cast<ThreadPool*>(param);

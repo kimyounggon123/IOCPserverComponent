@@ -1,31 +1,15 @@
 #include "Dispatcher.h"
 
-bool TaskPool::Initialize(int poolCount)
+bool DispatcherUnit::initialize(int poolCount, DWORD timemsPipe)
 {
+
 	for (int i = 0; i < poolCount; i++)
 	{
 		TaskPTR task = std::make_unique<Task>();
 		if (!task) return false;
 		if (!taskPool.push(std::move(task))) return false;
 	}
-	return true;
-}
 
-bool TaskPool::push(TaskPTR input)
-{
-	if (input == nullptr) return false;
-	input->Reset();
-	return taskPool.push(std::move(input));
-}
-bool TaskPool::pop(TaskPTR& output)
-{
-	return taskPool.pop(output);
-}
-
-bool DispatcherUnit::initialize(int poolCount, DWORD timemsPipe)
-{
-	taskPool = new TaskPool(INFINITE);
-	taskPool->Initialize(poolCount);
 	pipe.setTimems(timemsPipe);
 	return true;
 }
@@ -43,16 +27,13 @@ void DispatcherUnit::UndoAll()
 
 bool DispatcherUnit::pushPool(TaskPTR&& input)
 {
-	if (!taskPool->push(std::move(input)))
-	{
-		std::terminate();
-		return false;
-	}
-	return true;
+	if (input == nullptr) return false;
+	input->Reset();
+	return taskPool.push(std::move(input));
 }
 bool DispatcherUnit::popPool(TaskPTR& output)
 {
-	return taskPool->pop(output);
+	return taskPool.pop(output);
 }
 
 bool DispatcherUnit::enqueue(TaskPTR&& input)
@@ -68,9 +49,13 @@ bool DispatcherUnit::dequeue(TaskPTR& output)
 {
 	return pipe.dequeue(output);
 }
-
+/*
 
 Dispatcher* Dispatcher::instance = nullptr;
+
+
+
+
 bool Dispatcher::initialize()
 {
 	if (isInitialized) return true;
@@ -200,4 +185,33 @@ bool Dispatcher::isEmpty(const TaskInformation& where)
 		break;
 	}
 	return result;
+}
+*/
+
+DispatcherHub* DispatcherHub::instance = nullptr;
+
+bool DispatcherHub::ReturnTaskPTR(TaskPTR input, const int32_t id)
+{
+	auto unit = dispatcherMap.find(id);
+	if (unit == dispatcherMap.end()) return false;
+	return 	unit->second->pushPool(std::move(input));
+}
+bool DispatcherHub::BorrowTaskPTR(TaskPTR& output, const int32_t id)
+{
+	auto unit = dispatcherMap.find(id);
+	if (unit == dispatcherMap.end()) return false;
+	return 	unit->second->popPool(output);
+}
+
+bool DispatcherHub::EnqueueTaskPTR(TaskPTR input, const int32_t id)
+{
+	auto unit = dispatcherMap.find(id);
+	if (unit == dispatcherMap.end()) return false;
+	return 	unit->second->enqueue(std::move(input));
+}
+bool DispatcherHub::DequeueTaskPTR(TaskPTR& output, const int32_t id)
+{
+	auto unit = dispatcherMap.find(id);
+	if (unit == dispatcherMap.end()) return false;
+	return 	unit->second->dequeue(output);
 }

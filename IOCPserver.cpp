@@ -5,7 +5,7 @@ IOCPserver::IOCPserver(USHORT portTCP, USHORT portUDP, PacketProcessThreadPool* 
 	serverPtr(0),
 	IOCP(NULL), exit_flag(false), isGateClosed(false), countThreads(0), portTCP(portTCP), portUDP(portUDP),
 	sockTCP(INVALID_SOCKET), sockUDP(INVALID_SOCKET), addrV4{}, logs(Logs::getInstance()),
-	sessionManager(IOCPSessionManager::getInstance()), dispatcher(Dispatcher::getInstance())
+	sessionManager(IOCPSessionManager::getInstance()), dispatcher(DispatcherHub::getInstance())
 {}
 
 IOCPserver::~IOCPserver()
@@ -21,6 +21,7 @@ IOCPserver::~IOCPserver()
 
 bool IOCPserver::initialize()
 {
+	if (!dispatcher.AddNewDispatcher(DispatcherID::ServerToProcess)) throw "Dispatcher"; // 사용할 디스패처 추가
 	INT retval;
 	int optval = 1;
 	serverPtr = (ULONG_PTR)this;
@@ -145,12 +146,26 @@ void IOCPserver::closeServerGate()
 }
 void IOCPserver::Quit()
 {
-	exit_flag.store(false);
+	exit_flag.store(true);
 	closeServerGate();
 	for (int i = 0; i < countThreads; i++)
 		PostQueuedCompletionStatus(IOCP, 0, 0, nullptr); // 더미 호출 이용
 }
 
+
+void IOCPserver::WaitThreadClosing()
+{
+	DWORD result = WaitForMultipleObjects(
+		static_cast<DWORD>(workerThreads.size()),
+		workerThreads.data(),   // 핵심
+		TRUE,
+		INFINITE
+	);
+	if (result == WAIT_OBJECT_0)
+	{
+		logs.log("Threads are over.", "IOCP");
+	}
+}
 
 unsigned int WINAPI IOCPserver::workerThread(LPVOID server_info)
 {
@@ -266,7 +281,6 @@ bool IOCPserver::TCPLogic(SOCKETINFO* socketinfo, IO_CONTEXT* io, INT retval, DW
 
 bool IOCPserver::LeaveServer(SOCKETINFO* ptr)
 {
-
 	return true;
 }
 
@@ -384,7 +398,7 @@ bool IOCPserver::makePacketFromIOresult(SOCKETINFO* ptr, DWORD cbTransferred)
 	{
 		while (cbTransferred > offset) // 패킷 무결성 검증
 		{
-			if (!dispatcher.pop(input, TaskInformation::PacketProcess)) throw "memory limit";
+			if (!dispatcher.BorrowTaskPTR(input, DispatcherID::ServerToProcess)) throw "memory limit";
 			if (input == nullptr) throw "input is nullptr!";
 
 			input->sessionInfo = ptr;
@@ -394,14 +408,14 @@ bool IOCPserver::makePacketFromIOresult(SOCKETINFO* ptr, DWORD cbTransferred)
 			ERROR_CODE err = input->packet->deserialize(ptr->request.IO_buffer, cbTransferred - localOffset, localOffset);
 			if (err == ERROR_CODE::NEED_EXTRA_DATA)
 			{
-				dispatcher.push(std::move(input), TaskInformation::PacketProcess);
+				dispatcher.ReturnTaskPTR(std::move(input), DispatcherID::ServerToProcess);
 				break;
 			}
 			else if (err != ERROR_CODE::SUCCESS)
 			{
 				offset += 1; // 한 바이트씩 버리면서 다음 패킷 탐색 -> 그냥 전부 날려버릴까?
 				resyncCount++;
-				dispatcher.push(std::move(input), TaskInformation::PacketProcess);
+				dispatcher.ReturnTaskPTR(std::move(input), DispatcherID::ServerToProcess);
 				if (resyncCount >= MAX_RESYNC)
 				{
 					// 너무 많이 재동기화 했으면 남은 데이터 모두 버림
@@ -411,7 +425,7 @@ bool IOCPserver::makePacketFromIOresult(SOCKETINFO* ptr, DWORD cbTransferred)
 				continue;
 			}
 			if (isGateClosed.load()) input->packet->set_header_type(PacketType::ServerIsClosed);
-			if (!dispatcher.enqueue(std::move(input), TaskInformation::PacketProcess)) throw "enqueue()";
+			if (!dispatcher.EnqueueTaskPTR(std::move(input), DispatcherID::ServerToProcess)) throw "enqueue()";
 
 			offset = localOffset;
 		}
@@ -623,7 +637,7 @@ bool IOCPserver::MakePacketUDP(SOCKETINFO* ptr, DWORD cbTransferred)
 
 	try
 	{
-		if (!dispatcher.pop(input, TaskInformation::PacketProcess)) throw "memory limit";
+		if (!dispatcher.BorrowTaskPTR(input, DispatcherID::ServerToProcess)) throw "memory limit";
 		if (!input) throw "input is nullptr!";
 
 		input->sessionInfo = ptr;
@@ -633,7 +647,7 @@ bool IOCPserver::MakePacketUDP(SOCKETINFO* ptr, DWORD cbTransferred)
 		ERROR_CODE err = input->packet->deserialize(ptr->request.IO_buffer, cbTransferred, offset);
 		if (err != ERROR_CODE::SUCCESS)
 		{
-			dispatcher.push(std::move(input), TaskInformation::PacketProcess); // 다시 풀에 반환
+			dispatcher.ReturnTaskPTR(std::move(input), DispatcherID::ServerToProcess); // 다시 풀에 반환
 			//logs.log_error("deserialize failed", "MakePacketUDP()");
 			return false;
 		}
@@ -641,7 +655,7 @@ bool IOCPserver::MakePacketUDP(SOCKETINFO* ptr, DWORD cbTransferred)
 		if (isGateClosed.load())
 			input->packet->set_header_type(PacketType::ServerIsClosed);
 
-		if (!dispatcher.enqueue(std::move(input), TaskInformation::PacketProcess))
+		if (!dispatcher.EnqueueTaskPTR(std::move(input), DispatcherID::ServerToProcess))
 			throw "enqueue()";
 	}
 	catch (const char* msg)
@@ -660,6 +674,7 @@ bool IOCPserver::MakePacketUDP(SOCKETINFO* ptr, DWORD cbTransferred)
 bool SendManager::initialize()
 {
 	if (!ThreadPool::initialize()) return false;
+	if (!dispatcher.AddNewDispatcher(DispatcherID::ProcessToServer)) throw "Dispatcher"; // 사용할 디스패처 추가
 	return true;
 }
 
@@ -674,7 +689,7 @@ unsigned int SendManager::workLoop()
 
 		try
 		{
-			if (!dispatcher.dequeue(output, TaskInformation::Send)) continue;
+			if (!dispatcher.DequeueTaskPTR(output, DispatcherID::ProcessToServer)) continue;
 			if (output == nullptr) throw "output error";
 			if (output->isInvalid()) throw "output field error";
 
@@ -751,7 +766,7 @@ unsigned int SendManager::workLoop()
 
 		if (output != nullptr)
 		{
-			dispatcher.push(std::move(output), TaskInformation::Send);
+			dispatcher.ReturnTaskPTR(std::move(output), DispatcherID::ProcessToServer);
 		}
 	}
 	return 0;

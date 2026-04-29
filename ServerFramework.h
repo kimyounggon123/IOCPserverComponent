@@ -33,7 +33,7 @@ protected:
 
 	IOCPserver* iocp; USHORT portTCP; USHORT portUDP; // port = 0 -> invalid socket
 	SendManager* sendManager;
-	Dispatcher& dispatcher;
+	DispatcherHub& dispatcher;
 	IOCPSessionManager& sessionManager;
 
 	Logs& logs;
@@ -50,7 +50,7 @@ public:
 	ServerFramework(PacketProcess* packetProc = nullptr, USHORT portTCP = 0, USHORT portUDP = 0):
 		exit_flag(false),
 		packetProc(packetProc), packetThreadPool(nullptr), iocp(nullptr), sendManager(nullptr),
-		portTCP(portTCP), portUDP(portUDP), dispatcher(Dispatcher::getInstance()), sessionManager(IOCPSessionManager::getInstance()),
+		portTCP(portTCP), portUDP(portUDP), dispatcher(DispatcherHub::getInstance()), sessionManager(IOCPSessionManager::getInstance()),
 		logs(Logs::getInstance()), input(InputManager::getInstance())
 	{
 		if (WSAStartup(MAKEWORD(2, 2), &wsadata) != 0) return;

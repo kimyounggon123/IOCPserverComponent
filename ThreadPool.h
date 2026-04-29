@@ -40,8 +40,8 @@ public:
 
 	virtual bool initialize();
 	virtual bool Start();
-	virtual void Quit() { exit_flag.store(false); }
-
+	virtual void Quit() { exit_flag.store(true); }
+	void WaitThreadClosing();
 	static unsigned int WINAPI workerThread(LPVOID param);
 };
 

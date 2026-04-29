@@ -1,4 +1,4 @@
-#include "Jsonity.h"
+#include "Jsonify.h"
 // JSON ÆÄ½Ì
 bool Jsonity::parse(const std::string& jsonStr)
 {

@@ -17,7 +17,7 @@ bool ServerFramework::initialize()
 		if (sendManager && !sendManager->initialize())  throw "SendManager";
 
 		if (packetThreadPool && !packetThreadPool->initialize()) throw "PacketThreadPool";
-		if (!dispatcher.initialize()) throw "Dispatcher";
+
 	}
 	catch (const char* msg)
 	{
@@ -84,10 +84,26 @@ void ServerFramework::WorkDebugger()
 
 void ServerFramework::Quit()
 {
-	if (iocp) iocp->Quit();
-	if (sendManager) sendManager->Quit();
-	if (packetThreadPool) packetThreadPool->Quit();
-	
+	if (iocp)
+	{
+		iocp->Quit();
+		_tprintf(_T("Leave IOCP.\n"));
+	}
+	if (sendManager)
+	{
+		sendManager->Quit();
+		_tprintf(_T("Leave Send manager.\n"));
+	}
+	if (packetThreadPool)
+	{
+		packetThreadPool->Quit();
+		_tprintf(_T("Leave Packet Thread Pool.\n"));
+	}
+
+	iocp->WaitThreadClosing();
+	sendManager->WaitThreadClosing();
+	packetThreadPool->WaitThreadClosing();
+	DispatcherHub::DeleteInstance();
 }
 
 void ServerFramework::Run()

@@ -69,14 +69,20 @@ public:
 		memset(data, 0, BUFFERSIZE + 1);
 	}
 
+	void copyFrom(const Packet* other)
+	{
+		if (other == nullptr || this == other) return;
+
+		header = other->header;
+		memcpy(data, other->data, header.length);
+	}
+
 
 	void copyFrom(const Packet& other)
 	{
-		if (this == &other) return;
-		
-		header = other.header;
-		memcpy(data, other.data, header.length);
+		copyFrom(&other);
 	}
+
 
 	/// <control methods>
 	// These methods'll be used when you use or input data in the packet

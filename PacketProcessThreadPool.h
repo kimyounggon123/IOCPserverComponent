@@ -8,7 +8,7 @@
 class PacketProcessThreadPool : public ThreadPool
 {
 	PacketProcess* packetProcess; // 실제 작업 클래스
-	Dispatcher& dispatcher;
+	DispatcherHub& dispatcher;
 
 	unsigned int workLoop() override;
 public:

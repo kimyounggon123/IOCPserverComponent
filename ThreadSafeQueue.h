@@ -20,7 +20,7 @@ class ThreadSafeStack
 
 public:
 
-	ThreadSafeStack(DWORD timeout) : timeout_ms(timeout) {}
+	ThreadSafeStack(DWORD timeout = INFINITE) : timeout_ms(timeout) {}
 	~ThreadSafeStack() = default;
 
 	// 복사 금지
@@ -29,66 +29,38 @@ public:
 
 	bool push(T input) {
 		
-		try
-		{
-			std::lock_guard<std::mutex> lock(stack_mtx);
-			safe_stack.push(std::move(input));
-			stack_cv.notify_one();
-		}
-
-		catch (const std::exception& e)
-		{
-			// 표준 예외인 경우
-			std::cerr << "[push exception] " << e.what() << std::endl;
-			return false;
-		}
-		catch (...)
-		{
-			// 기타 예외
-			std::cerr << "[push unknown exception]" << std::endl;
-			return false;
-		}
-
+		std::lock_guard<std::mutex> lock(stack_mtx);
+		safe_stack.push(std::move(input));
+		stack_cv.notify_one();
 		return true;
 	}
 
 	bool pop(T& output) {
-		try
+		std::unique_lock<std::mutex> lock(stack_mtx);
+		if (timeout_ms == INFINITE)
 		{
-
-			std::unique_lock<std::mutex> lock(stack_mtx);
-
-			if (timeout_ms == INFINITE)
+			stack_cv.wait(lock, [this] { return !safe_stack.empty(); });
+		}
+		else {
+			if (!stack_cv.wait_for(lock, std::chrono::milliseconds(timeout_ms), [this] { return !safe_stack.empty(); }))
 			{
-				stack_cv.wait(lock, [this] { return !safe_stack.empty(); });
+				return false; // 타임아웃
 			}
-			else {
-				if (!stack_cv.wait_for(lock, std::chrono::milliseconds(timeout_ms), [this] { return !safe_stack.empty(); })) 
-				{
-					return false; // 타임아웃
-				}
-			}
-
-			output = std::move(safe_stack.top());
-			safe_stack.pop();
-
-		}
-		catch (const std::exception& e)
-		{
-			// 표준 예외인 경우
-			std::cerr << "[pop exception] " << e.what() << std::endl;
-			return false;
-		}
-		catch (...)
-		{
-			// 기타 예외
-			std::cerr << "[pop unknown exception]" << std::endl;
-			return false;
 		}
 
+		output = std::move(safe_stack.top());
+		safe_stack.pop();
 		return true;
 
 	}
+
+	bool pop_nowait(T& output)
+	{
+		output = std::move(safe_stack.top());
+		safe_stack.pop();
+		return true;
+	}
+
 
 	bool isEmpty() {
 		std::lock_guard<std::mutex> lock(stack_mtx);
@@ -104,6 +76,7 @@ public:
 	{
 		timeout_ms = timems;
 	}
+
 };
 
 template<typename T>
@@ -114,15 +87,16 @@ class ThreadSafeQueue {
 	DWORD timeout_ms;
 
 public:
-	ThreadSafeQueue(DWORD timeout_ms) : timeout_ms(timeout_ms)
+	ThreadSafeQueue(DWORD timeout_ms = INFINITE) : timeout_ms(timeout_ms)
 	{}
+	~ThreadSafeQueue() = default;
+
 	ThreadSafeQueue(const ThreadSafeQueue&) = delete;
 	ThreadSafeQueue& operator=(const ThreadSafeQueue&) = delete;
 
 	bool enqueue(T input) {
 		std::lock_guard<std::mutex> lock(queue_mtx);
 		safe_queue.push(std::move(input));
-		
 		queue_cv.notify_one();
 		return true;
 	}
@@ -137,6 +111,13 @@ public:
 			[this] { return !safe_queue.empty(); }))
 			return false;
 
+		output = std::move(safe_queue.front());   // move
+		safe_queue.pop();
+		return true;
+	}
+
+	bool dequeue_nowait(T& output)
+	{
 		output = std::move(safe_queue.front());   // move
 		safe_queue.pop();
 		return true;

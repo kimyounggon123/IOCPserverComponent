@@ -46,8 +46,8 @@ public:
 	{}
 
 	virtual void initialize();
-	virtual bool registerThreadLocal() { return true; }
-	virtual bool closeThreadLocal() { return true; }
+	virtual bool RegisterThreadLocal() { return true; }
+	virtual bool CloseThreadLocal() { return true; }
 	HandlerFunc getFunc(const Task& input);
 
 	bool getInitialized() noexcept { return isInitialized; }

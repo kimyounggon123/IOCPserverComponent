@@ -141,7 +141,6 @@
   <ItemGroup>
     <ClInclude Include="Dispatcher.h" />
     <ClInclude Include="InputManager.h" />
-    <ClInclude Include="Jsonity.h" />
     <ClInclude Include="PacketID.h" />
     <ClInclude Include="ServerFramework.h" />
     <ClInclude Include="DataToConnectWithClient.h" />

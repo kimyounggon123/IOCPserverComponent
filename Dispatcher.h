@@ -13,6 +13,7 @@ enum class TARGET_TYPE
 	Player	// Whisper 등의 특수 케이스
 };
 
+// 누구에게 전송할 것인가?
 struct Target
 {
 	TARGET_TYPE type;
@@ -41,6 +42,7 @@ struct Target
 	}
 };
 
+// 통신 기본 단위
 struct Task
 {
 	// 전송자 정보
@@ -70,15 +72,22 @@ public:
 
 	bool isInvalid() { return sessionInfo == nullptr || packet == nullptr; }
 
+
+	void copyFrom(const Task* other)
+	{
+		if (other == nullptr || this == other) return;
+		sessionInfo = other->sessionInfo;
+		udpInfo = other->udpInfo;
+		sessionType = other->sessionType;
+		target = other->target;
+		packet->copyFrom(other->packet);
+	}
+
 	void copyFrom(const Task& other)
 	{
-		if (this == &other) return;
-		sessionInfo = other.sessionInfo;
-		udpInfo = other.udpInfo;
-		sessionType = other.sessionType;
-		target = other.target;
-		packet->copyFrom(*other.packet);
+		copyFrom(&other);
 	}
+
 
 	~Task()
 	{
@@ -86,57 +95,35 @@ public:
 	}
 };
 
-
 using TaskPTR = std::unique_ptr<Task>;
-class TaskPool
-{
-	ThreadSafeStack<TaskPTR> taskPool; // 전체 풀
-
-public:
-
-	TaskPool(DWORD timems = INFINITE) : taskPool(timems)
-	{}
-	~TaskPool() = default;   // ← delete 필요 없음
-
-
-	bool Initialize(int poolCount = 1000);
-	bool push(TaskPTR task);
-	bool pop(TaskPTR& out);
-	bool isEmpty()
-	{
-		return taskPool.isEmpty();
-	}
-};
-
-
 using Pipe = ThreadSafeQueue<TaskPTR>;
+
 class DispatcherUnit
 {
-	TaskPool* taskPool;
+	ThreadSafeStack<TaskPTR> taskPool; // 최대 작업 풀
 	Pipe pipe; // server에서 받아온 패킷, 세션 정보
 public:
-	DispatcherUnit():
-		taskPool(nullptr),
+	DispatcherUnit(DWORD timems = INFINITE):
+		taskPool(timems),
 		pipe(100)
 	{}
 	~DispatcherUnit()
 	{
 		UndoAll();
-		SAFE_FREE(taskPool);
 	}
 
 	bool initialize(int poolCount = 1000, DWORD timemsPipe = 100);
 	void UndoAll();
 
-	bool pushPool(TaskPTR&& input);		 // into pool
-	bool popPool(TaskPTR& output);	 // from pool
+	bool pushPool(TaskPTR&& input);  // 다 쓴 정보 회수
+	bool popPool(TaskPTR& output);	 // 정보 가져오기
 
 	bool enqueue(TaskPTR&& input);    // into pipe
 	bool dequeue(TaskPTR& output);  // from pipe
 
 	bool isEmpty()
 	{
-		return taskPool->isEmpty();
+		return taskPool.isEmpty();
 	}
 
 
@@ -150,7 +137,7 @@ session -> pipe -> packetprocess
 packetprocesspool 결과 본 후에 packet 복사 후 -> pipe -> session
 */
 
-
+/*
 enum class TaskInformation
 {
 	PacketProcess,
@@ -159,8 +146,10 @@ enum class TaskInformation
 
 class Dispatcher
 {
-
 	bool isInitialized;
+
+	std::unordered_map<int, DispatcherUnit*> dispatcherMap;
+
 	DispatcherUnit* taskWaiting;
 	DispatcherUnit* taskSend;
 
@@ -182,6 +171,7 @@ public:
 		SAFE_FREE(taskSend);
 	}
 
+
 	bool initialize();
 
 	bool push(TaskPTR input, const TaskInformation& where);
@@ -196,6 +186,83 @@ public:
 
 	
 };
+*/
 
 
+
+struct DispatcherID
+{
+	static constexpr int32_t Base = 0; 
+	static constexpr int32_t ServerToProcess = Base + 0;
+	static constexpr int32_t ProcessToServer = Base + 1;
+};
+
+class DispatcherHub
+{
+	std::unordered_map<int32_t, DispatcherUnit*> dispatcherMap;
+
+	void DestroyAll()
+	{
+		for (auto it = dispatcherMap.begin(); it != dispatcherMap.end(); it++)
+			SAFE_FREE(it->second);
+	}
+	static DispatcherHub* instance;
+	DispatcherHub()
+	{}
+
+public:
+	static DispatcherHub& getInstance()
+	{
+		if (instance == nullptr) instance = new DispatcherHub;
+		return *instance;
+	}
+	static void DeleteInstance()
+	{
+		if (instance == nullptr) return;
+		SAFE_FREE(instance);
+	}
+
+	~DispatcherHub()
+	{
+		DestroyAll();
+	}
+
+	bool AddNewDispatcher(int32_t id, int poolCount = 1000, DWORD timemsPipe = 100)
+	{
+		if (dispatcherMap.count(id) != 0) return false;
+
+		DispatcherUnit* newOne = new DispatcherUnit();
+		if (newOne == nullptr) return false;
+
+		newOne->initialize(poolCount, timemsPipe);
+		dispatcherMap.emplace(id, newOne);
+		return true;
+	}
+
+	bool ReturnTaskPTR(TaskPTR input, const int32_t id);
+	bool BorrowTaskPTR(TaskPTR& output, const int32_t id);
+
+	bool EnqueueTaskPTR(TaskPTR input, const int32_t id);
+	bool DequeueTaskPTR(TaskPTR& output, const int32_t id);
+
+
+	bool MoveTaskToOtherPipe(TaskPTR& ToCopy, const int32_t home, const int32_t where)
+	{
+		if (dispatcherMap.count(home) != 0 || dispatcherMap.count(where) != 0) return false;
+		if (ToCopy == nullptr) return false;
+		
+		TaskPTR ToServer = nullptr;
+		if (!BorrowTaskPTR(ToServer, DispatcherID::ProcessToServer)) return false;
+		ToServer.get()->copyFrom(ToCopy.get());
+
+		// 2. 기존 사용한 Task 반환
+		if (!ReturnTaskPTR(std::move(ToCopy), DispatcherID::ServerToProcess)) return false;
+
+		// 3. 이 후 복사한 데이터 서버 측으로 전송
+		if (!EnqueueTaskPTR(std::move(ToServer), DispatcherID::ProcessToServer)) return false;
+
+		return true;
+	}
+
+};
 #endif
