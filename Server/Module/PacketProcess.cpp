@@ -1,6 +1,24 @@
 #include "PacketProcess.h"
 std::unordered_map<PacketProcessKey, HandlerFunc, PacketProcessKeyHash> PacketProcess::func_map;
 
+
+
+bool PacketProcess::BroadcastThisInRoom(Task& task, int roomID)
+{
+	Room* room = roomManager.GetRoom(0);
+	if (room == nullptr) return false;
+
+	task.target.type = TARGET_TYPE::Room;
+	task.target.room = room;
+	task.broadcastFlag = true;
+	return true;
+}
+bool PacketProcess::DBThis(Task& task)
+{
+	task.DBflag = true;
+	return true;
+}
+
 std::string PacketProcess::hash_function(const char* key, const char* to_hash) {
 	if (!key || !to_hash) return "";
 	unsigned long long hash_value = 5381;

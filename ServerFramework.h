@@ -1,13 +1,16 @@
 #ifndef _COMPONENT_H
 #define _COMPONENT_H
 
+#include "Module/Dispatcher.h"
+#include "Module/IOCPserver.h"
+#include "Module/SendManager.h"
+#include "Module/PacketProcessThreadPool.h"
+#include "Module/PacketProcess.h"
+#include "Module/DBconnector.h"
+#include "Module/Broadcaster.h"
+#include "UserControl/InputManager.h"
 
-#include "PacketProcessThreadPool.h"
-#include "PacketProcess.h"
-#include "IOCPserver.h"
-#include "Dispatcher.h"
 #include "Logs.h"
-#include "InputManager.h"
 
 // Port list
 #define CENTER_PORT 9000
@@ -19,11 +22,11 @@
 #define GAME_PORT 4000
 
 
-// 기본 1:1 통신용 
-// 브로드캐스팅은 따로 상속 등으로 구현하세요.
+
 class ServerFramework
 {
 	bool exit_flag;
+	bool use_debug_mode;
 	WSADATA wsadata;
 	
 protected:
@@ -31,10 +34,17 @@ protected:
 	PacketProcess* packetProc; // PacketProcess 부분만 상속 받아서 확장시키기
 	PacketProcessThreadPool* packetThreadPool;
 
+
 	IOCPserver* iocp; USHORT portTCP; USHORT portUDP; // port = 0 -> invalid socket
 	SendManager* sendManager;
+
+	bool use_broadcast;
+	Broadcaster* broadcaster;
+
+	std::vector<DBconnector*> DBconnectors;
+
 	DispatcherHub& dispatcher;
-	IOCPSessionManager& sessionManager;
+	RoomManager& roomManager;
 
 	Logs& logs;
 	InputManager& input;
@@ -42,30 +52,16 @@ protected:
 	void showCommands();
 	
 	virtual bool Start();
-	void WorkDebugger();
+	void Work();
 	virtual void Quit();
 
 public:
 
-	ServerFramework(PacketProcess* packetProc = nullptr, USHORT portTCP = 0, USHORT portUDP = 0):
-		exit_flag(false),
-		packetProc(packetProc), packetThreadPool(nullptr), iocp(nullptr), sendManager(nullptr),
-		portTCP(portTCP), portUDP(portUDP), dispatcher(DispatcherHub::getInstance()), sessionManager(IOCPSessionManager::getInstance()),
-		logs(Logs::getInstance()), input(InputManager::getInstance())
-	{
-		if (WSAStartup(MAKEWORD(2, 2), &wsadata) != 0) return;
-	}
+	ServerFramework(PacketProcess*&& packetProc, USHORT portTCP = 0, USHORT portUDP = 0, bool use_debug_mode = true, bool use_broadcast = true);
+	virtual ~ServerFramework();
 
-	virtual ~ServerFramework()
-	{
-		WSACleanup();
-		SAFE_FREE(iocp);
-		SAFE_FREE(sendManager);
-		SAFE_FREE(packetThreadPool);
-		SAFE_FREE(packetProc);
-	}
-
-	virtual bool initialize();
+	virtual bool Initialize();
+	bool InitializeDBconnector(int count, USHORT startPort = 2000);
 	void Run();
 };
 

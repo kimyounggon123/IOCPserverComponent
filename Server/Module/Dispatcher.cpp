@@ -5,9 +5,9 @@ bool DispatcherUnit::initialize(int poolCount, DWORD timemsPipe)
 
 	for (int i = 0; i < poolCount; i++)
 	{
-		TaskPTR task = std::make_unique<Task>();
+		std::unique_ptr<Task> task = std::make_unique<Task>();
 		if (!task) return false;
-		if (!taskPool.push(std::move(task))) return false;
+		if (!pool.AddElement(std::move(task))) return false;
 	}
 
 	pipe.setTimems(timemsPipe);
@@ -16,7 +16,7 @@ bool DispatcherUnit::initialize(int poolCount, DWORD timemsPipe)
 
 void DispatcherUnit::UndoAll()
 {
-	TaskPTR output = nullptr;
+	Task* output = nullptr;
 
 	while (!pipe.isEmpty())
 	{
@@ -25,18 +25,18 @@ void DispatcherUnit::UndoAll()
 	}
 }
 
-bool DispatcherUnit::pushPool(TaskPTR&& input)
+bool DispatcherUnit::pushPool(Task*&& input)
 {
 	if (input == nullptr) return false;
 	input->Reset();
-	return taskPool.push(std::move(input));
+	return pool.Push(std::move(input));
 }
-bool DispatcherUnit::popPool(TaskPTR& output)
+bool DispatcherUnit::popPool(Task*& output)
 {
-	return taskPool.pop(output);
+	return pool.Pop(output);
 }
 
-bool DispatcherUnit::enqueue(TaskPTR&& input)
+bool DispatcherUnit::enqueue(Task*&& input)
 {
 	if (!pipe.enqueue(std::move(input)))
 	{
@@ -45,7 +45,7 @@ bool DispatcherUnit::enqueue(TaskPTR&& input)
 	}
 	return true;
 }
-bool DispatcherUnit::dequeue(TaskPTR& output)
+bool DispatcherUnit::dequeue(Task*& output)
 {
 	return pipe.dequeue(output);
 }
@@ -189,27 +189,26 @@ bool Dispatcher::isEmpty(const TaskInformation& where)
 */
 
 DispatcherHub* DispatcherHub::instance = nullptr;
-
-bool DispatcherHub::ReturnTaskPTR(TaskPTR input, const int32_t id)
+bool DispatcherHub::ReturnTaskPTR(Task*&& input, const int32_t id)
 {
 	auto unit = dispatcherMap.find(id);
 	if (unit == dispatcherMap.end()) return false;
 	return 	unit->second->pushPool(std::move(input));
 }
-bool DispatcherHub::BorrowTaskPTR(TaskPTR& output, const int32_t id)
+bool DispatcherHub::BorrowTaskPTR(Task*& output, const int32_t id)
 {
 	auto unit = dispatcherMap.find(id);
 	if (unit == dispatcherMap.end()) return false;
 	return 	unit->second->popPool(output);
 }
 
-bool DispatcherHub::EnqueueTaskPTR(TaskPTR input, const int32_t id)
+bool DispatcherHub::EnqueueTaskPTR(Task*&& input, const int32_t id)
 {
 	auto unit = dispatcherMap.find(id);
 	if (unit == dispatcherMap.end()) return false;
 	return 	unit->second->enqueue(std::move(input));
 }
-bool DispatcherHub::DequeueTaskPTR(TaskPTR& output, const int32_t id)
+bool DispatcherHub::DequeueTaskPTR(Task*& output, const int32_t id)
 {
 	auto unit = dispatcherMap.find(id);
 	if (unit == dispatcherMap.end()) return false;

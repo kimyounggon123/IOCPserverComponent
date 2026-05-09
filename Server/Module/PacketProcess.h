@@ -2,11 +2,11 @@
 #define _PACKETPROCESS_H
 
 
-#include <functional>
-#include <unordered_map>
 #include "Dispatcher.h"
 #include "Logs.h"
-#include "DataToConnectWithClient.h"
+#include <functional>
+#include <unordered_map>
+
 
 // ÇØ½Ì¿ë
 struct PacketProcessKey {
@@ -35,11 +35,17 @@ class PacketProcess
 protected:
 	static std::unordered_map<PacketProcessKey, HandlerFunc, PacketProcessKeyHash> func_map;
 	bool isInitialized;
+
 	Logs& logs;
+	RoomManager& roomManager;
 
 	std::string hash_function(const char* key, const char* to_hash);
+
+	bool BroadcastThisInRoom(Task& task, int roomID);
+	bool DBThis(Task& task);
 public:
-	PacketProcess() : logs(Logs::getInstance()), isInitialized(false)
+	PacketProcess() : logs(Logs::getInstance()), roomManager(RoomManager::getInstance()),
+		isInitialized(false)
 	{}
 
 	virtual ~PacketProcess()

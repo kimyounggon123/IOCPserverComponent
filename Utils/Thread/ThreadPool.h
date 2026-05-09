@@ -1,12 +1,12 @@
 #ifndef _THREADPOOL_H
 #define _THREADPOOL_H
 
-#include "SOCKETINFO.h"
-#include <process.h>
-#include "ThreadSafeQueue.h"
-#include <functional>
-#include "Logs.h"
 
+#include <process.h>
+#include <functional>
+
+#include "ThreadSafeQueue.h"
+#include "Logs.h"
 
 class ThreadPool
 {

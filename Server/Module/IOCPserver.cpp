@@ -5,7 +5,7 @@ IOCPserver::IOCPserver(USHORT portTCP, USHORT portUDP, PacketProcessThreadPool* 
 	serverPtr(0),
 	IOCP(NULL), exit_flag(false), isGateClosed(false), countThreads(0), portTCP(portTCP), portUDP(portUDP),
 	sockTCP(INVALID_SOCKET), sockUDP(INVALID_SOCKET), addrV4{}, logs(Logs::getInstance()),
-	sessionManager(IOCPSessionManager::getInstance()), dispatcher(DispatcherHub::getInstance())
+	roomManager(RoomManager::getInstance()), dispatcher(DispatcherHub::getInstance())
 {}
 
 IOCPserver::~IOCPserver()
@@ -171,7 +171,7 @@ unsigned int WINAPI IOCPserver::workerThread(LPVOID server_info)
 {
 	IOCPserver* This = reinterpret_cast<IOCPserver*>(server_info);
 	Logs& logs = This->logs;
-	IOCPSessionManager& sessionManager = This->sessionManager;
+	RoomManager& roomManager = This->roomManager;
 	HANDLE IOCP = This->IOCP;
 
 	INT retval;
@@ -198,12 +198,11 @@ unsigned int WINAPI IOCPserver::workerThread(LPVOID server_info)
 		socketinfo = io->owner; // IO_CONTEXT에서 역추적
 
 		if (socketinfo == nullptr)	continue;
-		/*
-		std::string type = socketinfo->sessionType == SESSION_TYPE::TCP ? "TCP" : "UDP";
-		std::string ioType = io->ioType == IO_TYPE::Request ? "Request" : "Response";
-		printf("io: %p (type: %s) (io type: %s) (bytes: %d)\n",
-			io, type.c_str(), ioType.c_str(), cbTransferred);
-		*/
+		if (socketinfo->isBlocked)
+		{
+			This->roomManager.DeleteClientFromHere(socketinfo);
+			continue;
+		}
 
 		if (socketinfo->sessionType == SESSION_TYPE::TCP)
 			This->TCPLogic(socketinfo, io, retval, cbTransferred);
@@ -233,7 +232,7 @@ bool IOCPserver::TCPLogic(SOCKETINFO* socketinfo, IO_CONTEXT* io, INT retval, DW
 			int err = WSAGetLastError();
 			std::string errorMsg = "IO error, WSAError=" + std::to_string(err);
 			logs.log(errorMsg.c_str());
-			sessionManager.delete_socketinfo(socketinfo->id);
+			roomManager.DeleteClientFromHere(socketinfo);
 			return true;
 		}
 
@@ -244,7 +243,7 @@ bool IOCPserver::TCPLogic(SOCKETINFO* socketinfo, IO_CONTEXT* io, INT retval, DW
 			if (socketinfo->acceptCompleted.load())
 			{
 				logs.log("Remote closed connection");
-				sessionManager.delete_socketinfo(socketinfo->id);
+				roomManager.DeleteClientFromHere(socketinfo);
 				return true;
 			}
 
@@ -253,11 +252,11 @@ bool IOCPserver::TCPLogic(SOCKETINFO* socketinfo, IO_CONTEXT* io, INT retval, DW
 			{
 				if (!welcomeClient(socketinfo))
 				{
-					sessionManager.delete_socketinfo(socketinfo->id);
+					roomManager.DeleteClientFromHere(socketinfo);
 					throw "welcomeClient() failed";
 				}
 				socketinfo->acceptCompleted.store(true);
-				if (sessionManager.getClientCount() % 50 == 0)printf("count: %d\n", sessionManager.getClientCount());
+				// if (sessionManager.getClientCount() % 50 == 0)printf("count: %d\n", sessionManager.getClientCount());
 			}
 		}
 
@@ -266,7 +265,7 @@ bool IOCPserver::TCPLogic(SOCKETINFO* socketinfo, IO_CONTEXT* io, INT retval, DW
 		{
 			makePacketFromIOresult(socketinfo, cbTransferred);
 			if (!recvFromSOCKETINFO(socketinfo)) throw "request()";
-			socketinfo->updateActivity();
+			socketinfo->ResetHearthBeats();
 		}
 
 	}
@@ -335,7 +334,7 @@ bool IOCPserver::makeClientSocket()
 			}
 		}
 
-		sessionManager.input_socketinfo(ptr); // map에 저장
+		roomManager.GetSessionsOwner().input_socketinfo(ptr);
 	}
 	catch (const char* msg)
 	{
@@ -345,6 +344,7 @@ bool IOCPserver::makeClientSocket()
 	}
 	return true;
 }
+
 bool IOCPserver::welcomeClient(SOCKETINFO* ptr)
 {
 	bool result = true;
@@ -388,7 +388,7 @@ bool IOCPserver::makePacketFromIOresult(SOCKETINFO* ptr, DWORD cbTransferred)
 	if (!ptr) return false;
 
 	bool result = true;
-	TaskPTR input = nullptr;
+	Task* input = nullptr;
 	size_t offset = 0;
 
 	const int MAX_RESYNC = 5;
@@ -398,6 +398,8 @@ bool IOCPserver::makePacketFromIOresult(SOCKETINFO* ptr, DWORD cbTransferred)
 	{
 		while (cbTransferred > offset) // 패킷 무결성 검증
 		{
+			if (!ptr->CheckFullRequestProcessTCP()) throw "Request TCP deny";
+
 			if (!dispatcher.BorrowTaskPTR(input, DispatcherID::ServerToProcess)) throw "memory limit";
 			if (input == nullptr) throw "input is nullptr!";
 
@@ -427,6 +429,7 @@ bool IOCPserver::makePacketFromIOresult(SOCKETINFO* ptr, DWORD cbTransferred)
 			if (isGateClosed.load()) input->packet->set_header_type(PacketType::ServerIsClosed);
 			if (!dispatcher.EnqueueTaskPTR(std::move(input), DispatcherID::ServerToProcess)) throw "enqueue()";
 
+			ptr->AddRequestCountTCP();
 			offset = localOffset;
 		}
 	}
@@ -460,10 +463,10 @@ bool IOCPserver::UDPLogic(SOCKETINFO* socketinfo, IO_CONTEXT* io, INT retval, DW
 		if (io->ioType == IO_TYPE::Response)
 		{
 			socketinfo->setSendEvent();
-			if (socketinfo->isBroadcast)
+			if (socketinfo->isDummy)
 			{
 				//printf("broadcast sub response count\n");
-				sessionManager.ReleaseSOCKETINFOforUDP(socketinfo);
+				roomManager.GetSessionsOwner().ReleaseSOCKETINFOforUDP(std::move(socketinfo));
 			}
 			//socketinfo->subResponseCount();
 		}
@@ -480,7 +483,7 @@ bool IOCPserver::UDPLogic(SOCKETINFO* socketinfo, IO_CONTEXT* io, INT retval, DW
 		// cbTransferred > 0 일 경우
 		if (io->ioType == IO_TYPE::Request)
 		{
-			if (!sessionManager.SOCKADDRisinHere(socketinfo->addr))
+			if (!roomManager.GetSessionsOwner().SOCKADDRisinHere(socketinfo->addr))
 			{
 				WelcomeToUDP(socketinfo);
 			}
@@ -495,7 +498,7 @@ bool IOCPserver::UDPLogic(SOCKETINFO* socketinfo, IO_CONTEXT* io, INT retval, DW
 
 			if (cbTransferred != 0)	MakePacketUDP(socketinfo, cbTransferred);
 			if (!RecvUDP(socketinfo)) throw "request()";
-			socketinfo->updateActivity();
+			socketinfo->ResetHearthBeats();
 		}
 
 	}
@@ -540,7 +543,7 @@ bool IOCPserver::MakeSocketInfoToRecvFrom()
 			}
 		}
 
-		sessionManager.input_socketinfo(ptr); // map에 저장
+		roomManager.GetSessionsOwner().input_socketinfo(ptr); // map에 저장
 	}
 	catch (const char* msg)
 	{
@@ -584,7 +587,7 @@ bool IOCPserver::RecvUDP(SOCKETINFO* ptr)
 bool IOCPserver::WelcomeToUDP(SOCKETINFO* ptr)
 {
 	if (!ptr) return false;
-	sessionManager.inputUDPsession(ptr->addr);
+	roomManager.GetSessionsOwner().inputUDPsession(ptr->addr);
 	printf("welcome!\n");
 	return	true;
 }
@@ -594,7 +597,7 @@ bool IOCPserver::MakePacketUDP(SOCKETINFO* ptr, DWORD cbTransferred)
 	if (!ptr) return false;
 
 	bool result = true;
-	TaskPTR input = nullptr;
+	Task* input = nullptr;
 	size_t offset = 0;
 	/*
 	size_t offset = 0;
@@ -637,6 +640,8 @@ bool IOCPserver::MakePacketUDP(SOCKETINFO* ptr, DWORD cbTransferred)
 
 	try
 	{
+		if (!ptr->CheckFullRequestProcessUDP()) throw "Request UDP deny";
+
 		if (!dispatcher.BorrowTaskPTR(input, DispatcherID::ServerToProcess)) throw "memory limit";
 		if (!input) throw "input is nullptr!";
 
@@ -652,11 +657,11 @@ bool IOCPserver::MakePacketUDP(SOCKETINFO* ptr, DWORD cbTransferred)
 			return false;
 		}
 
-		if (isGateClosed.load())
-			input->packet->set_header_type(PacketType::ServerIsClosed);
+		if (isGateClosed.load()) input->packet->set_header_type(PacketType::ServerIsClosed);
 
-		if (!dispatcher.EnqueueTaskPTR(std::move(input), DispatcherID::ServerToProcess))
-			throw "enqueue()";
+		if (!dispatcher.EnqueueTaskPTR(std::move(input), DispatcherID::ServerToProcess)) throw "enqueue()";
+
+		ptr->AddRequestCountUDP();
 	}
 	catch (const char* msg)
 	{
@@ -666,110 +671,3 @@ bool IOCPserver::MakePacketUDP(SOCKETINFO* ptr, DWORD cbTransferred)
 
 	return result;
 }
-
-
-
-
-//////////////////////// SendManager ///////////////////////////////
-bool SendManager::initialize()
-{
-	if (!ThreadPool::initialize()) return false;
-	if (!dispatcher.AddNewDispatcher(DispatcherID::ProcessToServer)) throw "Dispatcher"; // 사용할 디스패처 추가
-	return true;
-}
-
-unsigned int SendManager::workLoop()
-{
-	INT retval;
-	DWORD sendbytes;
-
-	while (!exit_flag.load())
-	{
-		TaskPTR output = nullptr;
-
-		try
-		{
-			if (!dispatcher.DequeueTaskPTR(output, DispatcherID::ProcessToServer)) continue;
-			if (output == nullptr) throw "output error";
-			if (output->isInvalid()) throw "output field error";
-
-			
-			DWORD waitResult = output->sessionInfo->waitSendEvent();
-			if (waitResult != WAIT_OBJECT_0)
-			{
-				if (waitResult == WAIT_TIMEOUT)	throw "waitMutex() time up";
-				if (waitResult == WAIT_FAILED) throw "waitSendEvent() failed";
-			}
-			
-			output->sessionInfo->addResponseCount(); // 전송 카운트 추가
-
-			// output->packet->setClientID(0); // 클라이언트로 전송 시 패킷에 저장된 client id를 초기화시킴
-
-
-
-			if (output->sessionInfo->sessionType == SESSION_TYPE::TCP)
-			{
-
-				output->sessionInfo->response.reset_overlapped
-				(output->sessionInfo->response.IO_buffer, output->packet->getPacketSerializedLength(), false);
-
-				// Serialize
-				ERROR_CODE err = output->packet->serialize(output->sessionInfo->response.IO_buffer);
-				if (!err) throw "Serialize fail TCP";
-
-
-				// Sending data
-				retval = WSASend(output->sessionInfo->sock, &output->sessionInfo->response.wsabuf, 1, &sendbytes,
-					0, &output->sessionInfo->response.overlapped, NULL);
-				if (retval == SOCKET_ERROR) {
-					if (WSAGetLastError() != WSA_IO_PENDING)
-					{
-						throw "WSASend()";
-					}
-				}
-
-			}
-			
-			if (output->sessionInfo->sessionType == SESSION_TYPE::UDP)
-			{
-
-				output->sessionInfo->response.reset_overlapped
-				(output->sessionInfo->response.IO_buffer, output->packet->getPacketSerializedLength(), true);
-
-				// Serialize
-				ERROR_CODE err = output->packet->serialize(output->sessionInfo->response.IO_buffer);
-				if (!err) throw "Serialize fail UDP";
-
-				// Sending data
-				retval = WSASendTo(sockUDP,
-					&output->sessionInfo->response.wsabuf,
-					1,
-					&sendbytes,
-					0,
-					(SOCKADDR*)&output->udpInfo,
-					sizeof(SOCKADDR_IN),
-					&output->sessionInfo->response.overlapped,
-					NULL);
-				if (retval == SOCKET_ERROR) 
-				{
-					if (WSAGetLastError() != WSA_IO_PENDING)
-					{
-						throw "WSASend()";
-					}
-				}
-			}
-		}
-		catch (const char* msg)
-		{
-			logs.log_error(msg, "SendManager::work()");
-		}
-
-		if (output != nullptr)
-		{
-			dispatcher.ReturnTaskPTR(std::move(output), DispatcherID::ProcessToServer);
-		}
-	}
-	return 0;
-}
-
-

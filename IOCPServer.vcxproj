@@ -102,6 +102,8 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <AdditionalIncludeDirectories>Server;Utils;</AdditionalIncludeDirectories>
+      <PrecompiledHeaderFile />
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -123,36 +125,44 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="Dispatcher.cpp" />
-    <ClCompile Include="InputManager.cpp" />
-    <ClCompile Include="Jsonify.cpp" />
-    <ClCompile Include="PacketID.cpp" />
     <ClCompile Include="ServerFramework.cpp" />
-    <ClCompile Include="DataToConnectWithClient.cpp" />
-    <ClCompile Include="IOCPserver.cpp" />
-    <ClCompile Include="Logs.cpp" />
-    <ClCompile Include="Packet.cpp" />
-    <ClCompile Include="PacketProcess.cpp" />
-    <ClCompile Include="PacketProcessThreadPool.cpp" />
-    <ClCompile Include="SOCKETINFO.cpp" />
-    <ClCompile Include="ThreadPool.cpp" />
-    <ClCompile Include="ThreadSafeQueue.cpp" />
+    <ClCompile Include="Server\Module\Broadcaster.cpp" />
+    <ClCompile Include="Server\Module\DBconnector.cpp" />
+    <ClCompile Include="Server\Module\Dispatcher.cpp" />
+    <ClCompile Include="Server\Module\IOCPserver.cpp" />
+    <ClCompile Include="Server\Module\PacketProcess.cpp" />
+    <ClCompile Include="Server\Module\PacketProcessThreadPool.cpp" />
+    <ClCompile Include="Server\Module\SendManager.cpp" />
+    <ClCompile Include="Server\Module\SOCKETINFO.cpp" />
+    <ClCompile Include="Server\Packet\Packet.cpp" />
+    <ClCompile Include="Server\Packet\PacketID.cpp" />
+    <ClCompile Include="Utils\DataStructure\VectorData.cpp" />
+    <ClCompile Include="Utils\JSON\Jsonify.cpp" />
+    <ClCompile Include="Utils\Logs.cpp" />
+    <ClCompile Include="Utils\Thread\ThreadPool.cpp" />
+    <ClCompile Include="Utils\Thread\ThreadSafeQueue.cpp" />
+    <ClCompile Include="Utils\UserControl\InputManager.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Dispatcher.h" />
-    <ClInclude Include="InputManager.h" />
-    <ClInclude Include="PacketID.h" />
     <ClInclude Include="ServerFramework.h" />
-    <ClInclude Include="DataToConnectWithClient.h" />
-    <ClInclude Include="PacketProcess.h" />
-    <ClInclude Include="PacketProcessThreadPool.h" />
-    <ClInclude Include="SOCKETINFO.h" />
-    <ClInclude Include="IOCPserver.h" />
-    <ClInclude Include="Logs.h" />
-    <ClInclude Include="Packet.h" />
-    <ClInclude Include="stdafx.h" />
-    <ClInclude Include="ThreadPool.h" />
-    <ClInclude Include="ThreadSafeQueue.h" />
+    <ClInclude Include="Server\Module\Broadcaster.h" />
+    <ClInclude Include="Server\Module\DBconnector.h" />
+    <ClInclude Include="Server\Module\Dispatcher.h" />
+    <ClInclude Include="Server\Module\IOCPserver.h" />
+    <ClInclude Include="Server\Module\PacketProcess.h" />
+    <ClInclude Include="Server\Module\PacketProcessThreadPool.h" />
+    <ClInclude Include="Server\Module\SendManager.h" />
+    <ClInclude Include="Server\Module\SOCKETINFO.h" />
+    <ClInclude Include="Server\Packet\Packet.h" />
+    <ClInclude Include="Server\Packet\PacketID.h" />
+    <ClInclude Include="Utils\DataStructure\VectorData.h" />
+    <ClInclude Include="Utils\JSON\json.hpp" />
+    <ClInclude Include="Utils\JSON\Jsonify.h" />
+    <ClInclude Include="Utils\Logs.h" />
+    <ClInclude Include="Utils\stdafx.h" />
+    <ClInclude Include="Utils\Thread\ThreadPool.h" />
+    <ClInclude Include="Utils\Thread\ThreadSafeQueue.h" />
+    <ClInclude Include="Utils\UserControl\InputManager.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

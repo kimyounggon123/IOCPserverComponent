@@ -1,9 +1,10 @@
 #ifndef _THREADSAFEQUEUE_H
 #define _THREADSAFEQUEUE_H
 
+
+#include <Windows.h>
 #include <stack>
 #include <queue>
-#include <Windows.h>
 #include <atomic>
 #include <iostream>
 #include <chrono>
@@ -19,7 +20,6 @@ class ThreadSafeStack
 	DWORD timeout_ms;
 
 public:
-
 	ThreadSafeStack(DWORD timeout = INFINITE) : timeout_ms(timeout) {}
 	~ThreadSafeStack() = default;
 
@@ -27,8 +27,19 @@ public:
 	ThreadSafeStack(const ThreadSafeStack&) = delete;
 	ThreadSafeStack& operator=(const ThreadSafeStack&) = delete;
 
-	bool push(T input) {
-		
+	// 복사 스타일
+	bool push(const T& input) 
+	{
+		std::lock_guard<std::mutex> lock(stack_mtx);
+		safe_stack.push(input);
+		stack_cv.notify_one();
+		return true;
+	}
+	
+
+	// move 스타일
+	bool push(T&& input)
+	{
 		std::lock_guard<std::mutex> lock(stack_mtx);
 		safe_stack.push(std::move(input));
 		stack_cv.notify_one();
@@ -51,7 +62,6 @@ public:
 		output = std::move(safe_stack.top());
 		safe_stack.pop();
 		return true;
-
 	}
 
 	bool pop_nowait(T& output)
@@ -77,7 +87,16 @@ public:
 		timeout_ms = timems;
 	}
 
+	void clear()
+	{
+		while (!isEmpty())
+		{
+			T output;
+			pop_nowait(output);
+		}
+	}
 };
+
 
 template<typename T>
 class ThreadSafeQueue {
@@ -94,7 +113,16 @@ public:
 	ThreadSafeQueue(const ThreadSafeQueue&) = delete;
 	ThreadSafeQueue& operator=(const ThreadSafeQueue&) = delete;
 
-	bool enqueue(T input) {
+	// 복사 버전
+	bool enqueue(const T& input) {
+		std::lock_guard<std::mutex> lock(queue_mtx);
+		safe_queue.push(input);
+		queue_cv.notify_one();
+		return true;
+	}
+
+	// move 버전
+	bool enqueue(T&& input) {
 		std::lock_guard<std::mutex> lock(queue_mtx);
 		safe_queue.push(std::move(input));
 		queue_cv.notify_one();
@@ -138,10 +166,22 @@ public:
 	{
 		timeout_ms = timems;
 	}
+
+	void clear()
+	{
+		while (!isEmpty())
+		{
+			T output;
+			pop_nowait(output);
+		}
+	}
 };
 
 
-
+template <typename T>
+using LockStack = ThreadSafeStack<T>;
+template <typename T>
+using LockQueue = ThreadSafeQueue<T>;
 
 /*
 template <typename T>
@@ -408,4 +448,49 @@ public:
 
 	bool isEmpty() const {	return head.load().ptr == nullptr; }
 };
+
+
+
+template <typename T>
+class ThreadSafePool
+{
+	std::vector<std::unique_ptr<T>> owner;
+	ThreadSafeStack<T*> pool;
+
+public:
+	ThreadSafePool(DWORD timeout_ms = INFINITE) : pool(timeout_ms)
+	{}
+	~ThreadSafePool()
+	{
+		pool.clear();
+		owner.clear();
+	}
+
+	// initialize
+	bool AddElement(std::unique_ptr<T>&& element)
+	{
+		if (!element) return false;
+		pool.push(element.get());
+		owner.push_back(std::move(element));
+		return true;
+	}
+
+	bool Push(T*&& ret)
+	{
+		if (!ret) return false;
+		pool.push(std::move(ret));
+		return true;
+	}
+	bool Pop(T*& get)
+	{
+		return pool.pop(get);
+	}
+
+	size_t GetPoolSize() { return owner.size(); }
+
+	bool isEmpty() { return pool.isEmpty(); }
+
+};
+template <typename T>
+using LockPool = ThreadSafePool<T>;
 #endif

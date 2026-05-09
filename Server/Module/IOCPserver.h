@@ -1,9 +1,9 @@
 #ifndef _IOCPSERVER_H
 #define _IOCPSERVER_H
 
+#include "SOCKETINFO.h"
 #include "PacketProcessThreadPool.h"
-#include <Ws2tcpip.h>  // for inet_pton or InetPton
-#include <mswsock.h>
+
 
 // get IO result / recv only
 class IOCPserver
@@ -27,7 +27,7 @@ class IOCPserver
 	size_t countThreads;
 
 	Logs& logs;
-	IOCPSessionManager& sessionManager;
+	RoomManager& roomManager;
 	DispatcherHub& dispatcher;
 
 	std::vector<HANDLE> workerThreads;
@@ -62,23 +62,6 @@ public:
 	static unsigned int WINAPI workerThread(LPVOID server_info); 
 
 	SOCKET GetUDPSocket() const { return sockUDP; }
-};
-
-
-
-class SendManager : public ThreadPool
-{
-	DispatcherHub& dispatcher;
-	SOCKET sockUDP; // UDP 전용
-
-	unsigned int workLoop() override;
-public:
-	SendManager(int poolCapacity, SOCKET sockUDP) // udpSock은 TCP를 쓸 거면 invalid_socket
-		: ThreadPool(poolCapacity), sockUDP(sockUDP),
-		dispatcher(DispatcherHub::getInstance())
-	{}
-
-	bool initialize() override;
 };
 
 

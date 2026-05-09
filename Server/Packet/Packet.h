@@ -1,11 +1,11 @@
 #ifndef _PACKET_H
 #define _PACKET_H
 
-#include <Windows.h>
 #include "stdafx.h"
 #include <cstdint>
 #include <cstring>
 #include "PacketID.h"
+#include <WinSock2.h>
 
 #pragma pack(push, 1)   // 1바이트 단위로 정렬 시작
 struct PacketHeader
